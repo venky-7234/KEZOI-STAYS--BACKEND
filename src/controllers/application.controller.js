@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 const {
   normalizeEmail,
@@ -13,6 +14,7 @@ const {
 } = require('../services/contactValidation.service');
 const { validatePhoneNumber, INVALID_MOBILE_MESSAGE } = require('../utils/phoneValidator');
 const { notifyApplicationSubmitted } = require('../services/applicationNotification.service');
+const { calculateExclusiveGst } = require('../utils/gstCalculator');
 
 const DOCUMENT_TYPES = ['AADHAAR_CARD', 'PASSPORT', 'DRIVING_LICENCE'];
 const DOCUMENT_TYPE_ALIASES = {
@@ -77,7 +79,8 @@ const getActiveMobileDiscount = async (db, mobileNumber) => {
 const getPropertyAndQuote = async (db, propertyId, stay, mobileNumber = null) => {
   const propertyResult = await db.query(
     `SELECT id, property_code, property_name, area, city, status, max_guests,
-            base_price, included_guests, extra_guest_price, updated_at
+            base_price, included_guests, extra_guest_price, currency,
+            gst_enabled, gst_rate, price_includes_gst, updated_at
        FROM properties WHERE id = $1`,
     [propertyId]
   );
@@ -114,7 +117,17 @@ const getPropertyAndQuote = async (db, propertyId, stay, mobileNumber = null) =>
   const offer = await getActiveMobileDiscount(db, mobileNumber);
   const discountPercentage = Number(offer?.discount_percentage || 0);
   const discountAmount = Number(((originalAmount * discountPercentage) / 100).toFixed(2));
-  const finalAmount = Number((originalAmount - discountAmount).toFixed(2));
+  if (property.price_includes_gst) {
+    return { status: 500, error: 'GST-inclusive property pricing is not supported by this pricing configuration' };
+  }
+  const tax = calculateExclusiveGst({
+    baseAmount,
+    extraGuestAmount,
+    discountAmount,
+    gstRate: property.gst_rate ?? process.env.DEFAULT_GST_RATE ?? 18,
+    gstEnabled: property.gst_enabled !== false
+  });
+  const currency = property.currency || process.env.DEFAULT_CURRENCY || 'INR';
 
   return {
     property,
@@ -131,8 +144,19 @@ const getPropertyAndQuote = async (db, propertyId, stay, mobileNumber = null) =>
       discount_percentage: discountPercentage,
       discount_amount: discountAmount,
       discount_for_you: discountAmount,
-      final_amount: finalAmount,
-      total_amount: finalAmount,
+      taxable_amount: tax.taxable_amount,
+      gst_rate: tax.gst_rate,
+      cgst_rate: tax.cgst_rate,
+      cgst_amount: tax.cgst_amount,
+      sgst_rate: tax.sgst_rate,
+      sgst_amount: tax.sgst_amount,
+      igst_rate: tax.igst_rate,
+      igst_amount: tax.igst_amount,
+      gst_amount: tax.gst_amount,
+      currency,
+      price_includes_gst: false,
+      final_amount: tax.total_amount,
+      total_amount: tax.total_amount,
       mobile_discount_applied: Boolean(offer),
       mobile_discount_offer_id: offer?.id || null,
       discount_reason: offer?.reason || null,
@@ -145,7 +169,8 @@ const listPublicProperties = async (_req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, property_code, property_name, property_type, area, city, bedrooms,
-              bathrooms, max_guests, base_price, included_guests, extra_guest_price, updated_at
+              bathrooms, max_guests, base_price, included_guests, extra_guest_price,
+              currency, gst_enabled, gst_rate, price_includes_gst, updated_at
          FROM properties WHERE status = 'ACTIVE' ORDER BY property_name`
     );
     res.set('Cache-Control', 'no-store');
@@ -374,15 +399,18 @@ const submitApplication = async (req, res) => {
       `INSERT INTO enquiries(guest_id,property_id,source,check_in,check_out,adults,children,infants,pets,
           guest_message,quoted_amount,quoted_base_amount,extra_guest_amount,quoted_total_amount,status,
           document_type,document_path,document_original_name,document_mime_type,document_verification_status,
-          original_amount,discount_percentage,discount_amount,mobile_discount_offer_id)
-       VALUES($1::bigint,$2::bigint,$18::varchar,$3::date,$4::date,$5::integer,$6::integer,$7::integer,$8::integer,$9::text,$10::numeric,$11::numeric,$12::numeric,$13::numeric,'NEW',$14::varchar,$15::text,$16::text,$17::varchar,'PENDING',$19::numeric,$20::numeric,$21::numeric,$22::bigint)
+          original_amount,discount_percentage,discount_amount,mobile_discount_offer_id,
+          taxable_amount,gst_rate,cgst_amount,sgst_amount,igst_amount,gst_amount,currency,price_includes_gst)
+       VALUES($1::bigint,$2::bigint,$18::varchar,$3::date,$4::date,$5::integer,$6::integer,$7::integer,$8::integer,$9::text,$10::numeric,$11::numeric,$12::numeric,$13::numeric,'NEW',$14::varchar,$15::text,$16::text,$17::varchar,'PENDING',$19::numeric,$20::numeric,$21::numeric,$22::bigint,$23::numeric,$24::numeric,$25::numeric,$26::numeric,$27::numeric,$28::numeric,$29::varchar,$30::boolean)
        RETURNING *`,
       [guest.id, req.body.property_id, req.body.check_in, req.body.check_out, stay.adults, stay.children,
        stay.infants, stay.pets, req.body.guest_message || null, pricing.quote.total_amount,
        pricing.quote.base_amount, pricing.quote.extra_guest_amount, pricing.quote.total_amount,
        documentType, documentPath, req.file.originalname, req.file.mimetype, applicationSource,
        pricing.quote.original_amount, pricing.quote.discount_percentage, pricing.quote.discount_amount,
-       pricing.quote.mobile_discount_offer_id]
+        pricing.quote.mobile_discount_offer_id, pricing.quote.taxable_amount, pricing.quote.gst_rate,
+        pricing.quote.cgst_amount, pricing.quote.sgst_amount, pricing.quote.igst_amount,
+        pricing.quote.gst_amount, pricing.quote.currency, pricing.quote.price_includes_gst]
     );
     await client.query('COMMIT');
     completed = true;
@@ -404,11 +432,48 @@ const submitApplication = async (req, res) => {
   }
 };
 
+const uploadEnquiryIdentityDocument = async (req, res) => {
+  let decoded;
+  try {
+    const header = req.headers.authorization || '';
+    decoded = jwt.verify(header.startsWith('Bearer ') ? header.slice(7) : '', process.env.JWT_SECRET);
+  } catch (_error) {
+    if (req.file?.path) fs.unlink(req.file.path, () => {});
+    return res.status(401).json({ success: false, message: 'Invalid or expired upload token' });
+  }
+  if (decoded.purpose !== 'IDENTITY_DOCUMENT_UPLOAD' || String(decoded.enquiry_id) !== String(req.params.id)) {
+    if (req.file?.path) fs.unlink(req.file.path, () => {});
+    return res.status(403).json({ success: false, message: 'Upload token does not authorize this enquiry' });
+  }
+  const submitted = String(req.body.document_type || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  const documentType = DOCUMENT_TYPE_ALIASES[submitted] || submitted;
+  if (!req.file || !DOCUMENT_TYPES.includes(documentType)) {
+    if (req.file?.path) fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ success: false, message: 'A valid identity document and document_type are required' });
+  }
+  try {
+    const documentPath = path.relative(path.resolve(__dirname, '..'), req.file.path).replace(/\\/g, '/');
+    const result = await pool.query(`UPDATE enquiries SET document_type=$1, document_path=$2,
+      document_original_name=$3, document_mime_type=$4, document_verification_status='PENDING', updated_at=NOW()
+      WHERE id=$5 AND guest_id=$6 AND document_path IS NULL RETURNING id,status,document_verification_status`,
+      [documentType, documentPath, req.file.originalname, req.file.mimetype, req.params.id, decoded.guest_id]);
+    if (!result.rows.length) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(409).json({ success: false, message: 'Document already uploaded or enquiry not found' });
+    }
+    return res.json({ success: true, message: 'Identity document uploaded for staff review', enquiry: result.rows[0] });
+  } catch (error) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(500).json({ success: false, message: 'Unable to upload identity document' });
+  }
+};
+
 module.exports = {
   listPublicProperties,
   getUnavailableDates,
   getQuote,
   requestVerification,
   confirmVerification,
-  submitApplication
+  submitApplication,
+  uploadEnquiryIdentityDocument
 };

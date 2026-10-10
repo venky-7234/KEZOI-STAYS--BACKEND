@@ -21,4 +21,14 @@ router.post('/submit', (req, res, next) => {
   });
 }, controller.submitApplication);
 
+router.post('/enquiries/:id/identity-document', (req, res, next) => {
+  uploadIdentity.single('identity_document')(req, res, error => {
+    if (!error) return next();
+    return res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({
+      success: false,
+      message: error.code === 'LIMIT_FILE_SIZE' ? 'Identity document must not exceed 5 MB' : error.message
+    });
+  });
+}, controller.uploadEnquiryIdentityDocument);
+
 module.exports = router;

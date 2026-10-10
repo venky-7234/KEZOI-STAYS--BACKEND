@@ -852,13 +852,14 @@ const approveApplication = async (req, res) => {
   try {
     const result = await pool.query(
       `UPDATE enquiries e
-          SET status = 'QUALIFIED', document_verification_status = 'VERIFIED', updated_at = CURRENT_TIMESTAMP
+          SET status = 'QUALIFIED', updated_at = CURRENT_TIMESTAMP
          FROM guests g, properties p
         WHERE e.id = $1::bigint AND e.guest_id = g.id AND e.property_id = p.id
+          AND e.document_path IS NOT NULL AND e.document_verification_status = 'VERIFIED'
         RETURNING e.*, g.full_name, g.email, p.property_name`,
       [req.params.id]
     );
-    if (!result.rows.length) return res.status(404).json({ success: false, message: 'Application not found' });
+    if (!result.rows.length) return res.status(409).json({ success: false, message: 'Application cannot be approved until its identity document is uploaded and verified' });
     const application = result.rows[0];
     triggerEnquiryWhatsAppAutomation({
       event: 'BOOKING_APPROVED',

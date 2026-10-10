@@ -10,6 +10,9 @@
     "migrate:tg-enquiry-source": "node scripts/migrate-tg-enquiry-source.js",
     "migrate:discounts-referrals": "node scripts/migrate-discounts-referrals.js",
     "migrate:mobile-discounts": "node scripts/migrate-mobile-discounts.js",
+    "migrate:gst-pricing": "node scripts/migrate-gst-pricing.js",
+    "migrate:whatsapp-integration": "node scripts/migrate-whatsapp-integration.js",
+    "test": "node --test",
     "check": "node --check server.js && node --check src/controllers/application.controller.js && node --check src/controllers/booking.controller.js && node --check src/controllers/property.controller.js && node --check src/controllers/dashboard.controller.js"
   },
   "keywords": [],

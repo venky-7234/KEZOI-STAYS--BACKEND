@@ -1,5 +1,6 @@
 node_modules/
 .env
+.env.test
 npm-debug.log*
 *.log
 src/uploads/identity-documents/*

@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 const AUTOMATION_EVENTS = Object.freeze([
   'BOOKING_REQUEST_RECEIVED',
   'BOOKING_APPROVED',
@@ -54,54 +56,51 @@ const sendWhatsAppAutomation = async ({
     throw new Error('N8N_WHATSAPP_WEBHOOK_URL is not configured');
   }
 
-  const response = await fetch(process.env.N8N_WHATSAPP_WEBHOOK_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify(removeUndefinedValues({
-      event,
-      phone: normalizeWhatsAppPhone(phone),
-      name,
-      bookingReference,
-      propertyId,
-      propertyName,
-      checkIn,
-      checkOut,
-      guestsCount,
-      amount,
-      paymentLink,
-      paymentStatus,
-      status,
-      message,
-      rejectionReason
-    })),
-    signal: AbortSignal.timeout(10000)
-  });
-
-  const responseText = await response.text();
-  let responseData = responseText;
-
-  if (responseText) {
+  if (!process.env.N8N_WEBHOOK_SIGNING_SECRET) {
+    throw new Error('N8N_WEBHOOK_SIGNING_SECRET is not configured');
+  }
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const deliveryId = crypto.randomUUID();
+  const body = JSON.stringify(removeUndefinedValues({
+    eventVersion: '1.0', eventId: deliveryId, occurredAt: new Date().toISOString(),
+    event, phone: normalizeWhatsAppPhone(phone), name, bookingReference,
+    propertyId, propertyName, checkIn, checkOut, guestsCount, amount,
+    paymentLink, paymentStatus, status, message, rejectionReason
+  }));
+  const signature = crypto.createHmac('sha256', process.env.N8N_WEBHOOK_SIGNING_SECRET)
+    .update(`${timestamp}.${body}`).digest('hex');
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      responseData = JSON.parse(responseText);
-    } catch (_error) {
-      // Keep non-JSON n8n responses as text for test diagnostics.
+      const response = await fetch(process.env.N8N_WHATSAPP_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-kezoi-timestamp': timestamp,
+          'x-kezoi-delivery-id': deliveryId,
+          'x-kezoi-signature': `sha256=${signature}`
+        },
+        body,
+        signal: AbortSignal.timeout(10000)
+      });
+      const responseText = await response.text();
+      let responseData = responseText;
+      if (responseText) {
+        try { responseData = JSON.parse(responseText); } catch (_error) {}
+      }
+      if (response.ok) return { success: true, status: response.status, data: responseData, deliveryId };
+      const error = new Error(`n8n returned HTTP ${response.status}`);
+      error.webhookStatus = response.status;
+      error.webhookResponse = responseData;
+      if (response.status !== 429 && response.status < 500) throw error;
+      lastError = error;
+    } catch (error) {
+      lastError = error;
+      if (error.webhookStatus && error.webhookStatus !== 429 && error.webhookStatus < 500) throw error;
     }
+    if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 250 * (2 ** (attempt - 1))));
   }
-
-  if (!response.ok) {
-    const error = new Error(`n8n returned HTTP ${response.status}`);
-    error.webhookStatus = response.status;
-    error.webhookResponse = responseData;
-    throw error;
-  }
-
-  return {
-    success: true,
-    status: response.status,
-    data: responseData
-  };
+  throw lastError;
 };
 
 const triggerWhatsAppAutomation = payload => {

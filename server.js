@@ -47,6 +47,8 @@ const applicationRoutes =
 const whatsappRoutes =
   require('./src/routes/whatsapp.routes');
 const discountOfferRoutes = require('./src/routes/discountOffer.routes');
+const integrationRoutes = require('./src/routes/integration.routes');
+const metaFlowRoutes = require('./src/routes/metaFlow.routes');
 
 
 // ======================================================
@@ -70,7 +72,7 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ verify: (req, _res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
 
 app.use(
   express.urlencoded({
@@ -155,6 +157,8 @@ app.use(
 );
 
 app.use('/api/discount-offers', discountOfferRoutes);
+app.use('/api/integrations', integrationRoutes);
+app.use('/api/meta/flows', metaFlowRoutes);
 
 app.use(
   '/api/payments',
