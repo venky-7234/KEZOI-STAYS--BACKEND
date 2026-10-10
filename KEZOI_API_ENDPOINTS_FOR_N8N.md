@@ -411,3 +411,44 @@ WhatsApp enquiry
 ```
 
 No email OTP, automatic payment request, payment link, or immediate booking confirmation is part of this integration.
+
+## Internal dashboard GST display contract
+
+The authenticated internal dashboard response now exposes stored GST snapshot fields for upcoming bookings and recent enquiries. This is for the Kezoi dashboard frontend, not n8n.
+
+Booking rows expose:
+
+```text
+base_amount
+discount_amount
+taxable_amount
+gst_rate
+cgst_amount
+sgst_amount
+igst_amount
+gst_amount
+currency
+price_includes_gst
+total_amount
+```
+
+Enquiry rows expose:
+
+```text
+original_amount
+quoted_base_amount
+extra_guest_amount
+discount_percentage
+discount_amount
+taxable_amount
+gst_rate
+cgst_amount
+sgst_amount
+igst_amount
+gst_amount
+currency
+price_includes_gst
+quoted_total_amount
+```
+
+The dashboard frontend should display the stored snapshot and must not recalculate authoritative GST. Older records created before the GST migration may contain `null`; show `—` or a clearly labelled legacy total instead of inventing a tax split.
