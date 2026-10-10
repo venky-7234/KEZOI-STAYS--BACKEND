@@ -33,13 +33,13 @@ WhatsApp enquiry
 | `GET /api/applications/properties` | Existing | Live; HTTP 200 | Safe live GET passed | Website/n8n |
 | `GET /api/applications/properties/:id/quote` | Existing | Live; HTTP 200 | Safe live GET passed for property 1 | Website/n8n fallback |
 | `GET /api/applications/properties/:id/unavailable-dates` | Existing | Live; HTTP 200 | Safe live GET passed for property 1 | Website/calendar |
-| `POST /api/integrations/availability` | Implemented locally | Not deployed; HTTP 404 | Input unit tests only; no DB-backed HTTP test | n8n |
-| `POST /api/integrations/enquiries` | Implemented locally | Not deployed; HTTP 404 | No DB-backed HTTP test | n8n |
-| `POST /api/applications/enquiries/:id/identity-document` | Implemented locally | Not deployed/verified | No end-to-end upload test | Secure website |
-| `POST /api/meta/flows/booking` | Implemented locally | Not deployed/verified | Crypto unit test passed; no Meta round trip | Meta directly |
-| `GET /api/meta/flows/health` | Implemented locally | Not deployed; HTTP 404 | Local syntax checked | Operator/Meta setup |
+| `POST /api/integrations/availability` | Implemented | Deployed; unauthenticated request returned 401 | Authenticated production DB read returned 200 with one live property and GST quote | n8n |
+| `POST /api/integrations/enquiries` | Implemented | Deployed; unauthenticated request returned 401 | Authentication boundary tested; production write/idempotency not yet tested | n8n |
+| `POST /api/applications/enquiries/:id/identity-document` | Implemented | Deployed with backend release | No end-to-end website/upload test | Secure website |
+| `POST /api/meta/flows/booking` | Implemented | Deployed, but Meta secrets are not configured | Crypto unit test passed; no Meta round trip | Meta directly |
+| `GET /api/meta/flows/health` | Implemented | Deployed; HTTP 200 | Production response verified with `configured:false` | Operator/Meta setup |
 
-Local verification on 10 October 2026: 8 tests passed, 0 failed; JavaScript syntax checks passed. Those tests cover availability input parsing, GST calculation, and Meta encryption/decryption. They do not prove production deployment or database-backed enquiry creation.
+Verification on 10 October 2026: 8 tests passed in the production image, 0 failed; JavaScript syntax checks passed. Production migrations `005` and `006` were applied after a verified custom-format PostgreSQL backup. An authenticated production availability read returned TG-0001 for a two-night stay with INR 19,998 taxable value, INR 3,599.64 GST at 18%, and INR 23,597.64 total. Enquiry writes, document upload, and Meta round trips remain untested.
 
 The owner selected a production-only rollout. No separate test database is required. Before enabling the writer, back up production, deploy the migrations/code, and create one clearly identified controlled test enquiry through the API.
 
@@ -102,7 +102,7 @@ Never place the token in exported workflow JSON, Meta Flow JSON, browser code, a
 
 ## 6. Aggregate availability API
 
-Pending production deployment:
+Deployed and authenticated against the production database:
 
 ```http
 POST https://api.kezoistays.com/api/integrations/availability
@@ -180,7 +180,7 @@ Implemented application errors: 400 invalid input, 401 invalid service credentia
 
 ## 7. Create enquiry API — exact contract
 
-Pending production deployment:
+Deployed; keep the n8n writer disabled until the controlled enquiry/idempotency test and website-handoff validation pass:
 
 ```http
 POST https://api.kezoistays.com/api/integrations/enquiries
@@ -507,12 +507,11 @@ Available immediately:
 - Live unavailable-date calendar.
 - Offline n8n node configuration in disabled state.
 
-Must wait for production deployment:
+Deployed but still awaiting integration/configuration tests:
 
-- Aggregate availability API.
-- Enquiry creation API.
-- Secure identity-upload handoff.
-- Meta encrypted data exchange.
-- Signed backend events.
+- Enquiry creation write and idempotent replay.
+- Secure identity-upload website handoff.
+- Meta encrypted data exchange and registered RSA public key.
+- Signed backend events and n8n signature verification.
 
 Do not give n8n direct database or internal dashboard access. The deployed restricted APIs provide the live data it needs while preserving the approved booking lifecycle.

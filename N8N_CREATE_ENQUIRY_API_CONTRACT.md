@@ -8,8 +8,8 @@ Verified from the local backend source and the supplied sanitized n8n/Meta Flow 
 - Local syntax checks: passed.
 - Local unit tests: 8 passed, 0 failed.
 - Database-backed enquiry API test: not run. The owner chose a production-only integration and does not require a separate test database; any production write verification must therefore use an explicitly identified test enquiry and be cleaned up through the normal administrative process.
-- Production deployment: **not deployed**. Safe checks against `https://api.kezoistays.com` returned HTTP 404 for the integration availability/enquiry routes and Meta Flow health route.
-- n8n action: keep the repurposed node disabled until the production migration/deployment and a controlled live test pass.
+- Production deployment: deployed at `https://api.kezoistays.com`; the unauthenticated enquiry request returned HTTP 401, proving the route and service-auth boundary are active.
+- n8n action: keep the repurposed node disabled until a controlled live enquiry/idempotency test and secure website-handoff validation pass.
 
 The production-only decision does not authorize direct database access. n8n receives live data through HTTPS APIs. Before the write endpoint can be enabled, migration `006_whatsapp_integration.sql` and the updated backend must be deployed to production with a database backup and rollback plan. The node remains disabled until a controlled production test succeeds.
 
