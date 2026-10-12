@@ -3,8 +3,15 @@ const path = require('path');
 const pool = require('../config/database');
 const { sendEmail } = require('../services/mail.service');
 const {
-  triggerEnquiryWhatsAppAutomation
+  triggerEnquiryWhatsAppAutomation,
+  sendWhatsAppAutomation
 } = require('../services/whatsapp.service');
+const {
+  ALLOWED_STATUSES,
+  EnquiryTransitionError,
+  validateGenericTransition,
+  validateApproval
+} = require('../services/enquiryWorkflow.service');
 
 const ALLOWED_SOURCES = [
   'WEBSITE',
@@ -16,17 +23,6 @@ const ALLOWED_SOURCES = [
   'AIRBNB',
   'WALK_IN',
   'OTHER'
-];
-
-const ALLOWED_STATUSES = [
-  'NEW',
-  'CONTACTED',
-  'QUALIFIED',
-  'QUOTED',
-  'FOLLOW_UP',
-  'CONVERTED',
-  'LOST',
-  'CANCELLED'
 ];
 
 // ======================================================
@@ -667,6 +663,7 @@ const getEnquiryById = async (req, res) => {
 // ======================================================
 
 const updateEnquiry = async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
 
@@ -683,6 +680,7 @@ const updateEnquiry = async (req, res) => {
     } = req.body;
 
     let normalizedStatus = null;
+    let statusChanged = false;
 
     if (status) {
       normalizedStatus = String(status).toUpperCase();
@@ -695,7 +693,39 @@ const updateEnquiry = async (req, res) => {
       }
     }
 
-    const result = await pool.query(
+    await client.query('BEGIN');
+    const currentResult = await client.query(
+      `SELECT * FROM enquiries WHERE id = $1::bigint FOR UPDATE`,
+      [id]
+    );
+    if (!currentResult.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Enquiry not found' });
+    }
+    const current = currentResult.rows[0];
+
+    if (normalizedStatus) {
+      let hasActiveBooking = false;
+      if (['LOST', 'CANCELLED'].includes(normalizedStatus)) {
+        const bookingResult = await client.query(
+          `SELECT 1 FROM bookings
+            WHERE enquiry_id = $1::bigint
+              AND booking_status IN ('HOLD', 'CONFIRMED', 'CHECKED_IN')
+            LIMIT 1`,
+          [id]
+        );
+        hasActiveBooking = bookingResult.rows.length > 0;
+      }
+      const transition = validateGenericTransition({
+        currentStatus: current.status,
+        requestedStatus: normalizedStatus,
+        role: req.user.role,
+        hasActiveBooking
+      });
+      statusChanged = transition.changed;
+    }
+
+    const result = await client.query(
       `
       UPDATE enquiries
       SET
@@ -728,19 +758,9 @@ const updateEnquiry = async (req, res) => {
       ]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Enquiry not found'
-      });
-    }
+    await client.query('COMMIT');
 
-    if (normalizedStatus === 'QUALIFIED') {
-      triggerEnquiryWhatsAppAutomation({
-        event: 'BOOKING_APPROVED',
-        enquiryId: result.rows[0].id
-      });
-    } else if (['LOST', 'CANCELLED'].includes(normalizedStatus)) {
+    if (statusChanged && ['LOST', 'CANCELLED'].includes(normalizedStatus)) {
       triggerEnquiryWhatsAppAutomation({
         event: 'BOOKING_REJECTED',
         enquiryId: result.rows[0].id,
@@ -755,6 +775,14 @@ const updateEnquiry = async (req, res) => {
     });
 
   } catch (error) {
+    await client.query('ROLLBACK');
+    if (error instanceof EnquiryTransitionError) {
+      return res.status(error.status).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
     console.error('Update enquiry error:', error);
 
     return res.status(500).json({
@@ -762,6 +790,8 @@ const updateEnquiry = async (req, res) => {
       message: 'Unable to update enquiry',
       error: error.message
     });
+  } finally {
+    client.release();
   }
 };
 
@@ -776,23 +806,43 @@ const reviewIdentityDocument = async (req, res) => {
       });
     }
 
+    const rejectionReason = status === 'REJECTED'
+      ? String(req.body.rejection_reason || '').trim() || null
+      : null;
+    const currentResult = await pool.query(
+      `SELECT id, document_path, document_verification_status
+         FROM enquiries WHERE id = $1::bigint`,
+      [req.params.id]
+    );
+    if (!currentResult.rows.length || !currentResult.rows[0].document_path) {
+      return res.status(404).json({ success: false, message: 'Application document not found' });
+    }
+    if (currentResult.rows[0].document_verification_status === status) {
+      return res.json({
+        success: true,
+        message: `Identity document is already ${status.toLowerCase()}`,
+        unchanged: true
+      });
+    }
     const result = await pool.query(
       `UPDATE enquiries
           SET document_verification_status = $1,
+              document_reviewed_by = $3::bigint,
+              document_reviewed_at = CURRENT_TIMESTAMP,
+              document_rejection_reason = $4,
               updated_at = CURRENT_TIMESTAMP
         WHERE id = $2 AND document_path IS NOT NULL
+          AND document_verification_status IS DISTINCT FROM $1
         RETURNING *`,
-      [status, req.params.id]
+      [status, req.params.id, req.user.id, rejectionReason]
     );
 
-    if (!result.rows.length) {
-      return res.status(404).json({ success: false, message: 'Application document not found' });
-    }
+    if (!result.rows.length) return res.status(409).json({ success: false, code: 'DOCUMENT_REVIEW_CONFLICT', message: 'Document review state changed; reload and try again' });
     if (status === 'REJECTED') {
       triggerEnquiryWhatsAppAutomation({
         event: 'BOOKING_REJECTED',
         enquiryId: result.rows[0].id,
-        rejectionReason: req.body.rejection_reason
+        rejectionReason
       });
     }
     return res.json({
@@ -850,30 +900,95 @@ const viewIdentityDocument = async (req, res) => {
 
 const approveApplication = async (req, res) => {
   try {
+    const currentResult = await pool.query(
+      `SELECT e.*, g.full_name, g.email, g.phone, g.whatsapp_number,
+              p.property_name, p.property_code
+         FROM enquiries e
+         JOIN guests g ON g.id = e.guest_id
+         JOIN properties p ON p.id = e.property_id
+        WHERE e.id = $1::bigint`,
+      [req.params.id]
+    );
+    if (!currentResult.rows.length) {
+      return res.status(404).json({ success: false, message: 'Enquiry not found' });
+    }
+    const current = currentResult.rows[0];
+    const transition = validateApproval({
+      currentStatus: current.status,
+      documentPath: current.document_path,
+      documentVerificationStatus: current.document_verification_status
+    });
+    if (!transition.changed) {
+      return res.json({
+        success: true,
+        message: 'Application is already approved',
+        already_approved: true,
+        enquiry: current,
+        notifications: { sent: false, reason: 'already_approved' }
+      });
+    }
+
     const result = await pool.query(
       `UPDATE enquiries e
           SET status = 'QUALIFIED', updated_at = CURRENT_TIMESTAMP
          FROM guests g, properties p
         WHERE e.id = $1::bigint AND e.guest_id = g.id AND e.property_id = p.id
           AND e.document_path IS NOT NULL AND e.document_verification_status = 'VERIFIED'
-        RETURNING e.*, g.full_name, g.email, p.property_name`,
-      [req.params.id]
+          AND e.status = $2
+        RETURNING e.*, g.full_name, g.email, g.phone, g.whatsapp_number,
+                  p.property_name, p.property_code`,
+      [req.params.id, current.status]
     );
-    if (!result.rows.length) return res.status(409).json({ success: false, message: 'Application cannot be approved until its identity document is uploaded and verified' });
+    if (!result.rows.length) {
+      return res.status(409).json({
+        success: false,
+        code: 'APPROVAL_CONFLICT',
+        message: 'Application changed while approval was being processed; reload and try again'
+      });
+    }
     const application = result.rows[0];
-    triggerEnquiryWhatsAppAutomation({
-      event: 'BOOKING_APPROVED',
-      enquiryId: application.id
-    });
+    const notificationJobs = [
+      sendWhatsAppAutomation({
+        event: 'BOOKING_APPROVED',
+        phone: application.whatsapp_number || application.phone,
+        name: application.full_name,
+        bookingReference: `APP-${application.id}`,
+        propertyId: application.property_code || application.property_id,
+        propertyName: application.property_name,
+        checkIn: application.check_in,
+        checkOut: application.check_out,
+        guestsCount: Number(application.adults || 0) + Number(application.children || 0) + Number(application.infants || 0),
+        amount: application.quoted_total_amount || application.quoted_amount,
+        status: application.status
+      })
+    ];
     if (application.email) {
-      sendEmail({
+      notificationJobs.push(sendEmail({
         to: application.email,
         subject: `Application approved #${application.id}`,
         text: `Hi ${application.full_name}, your application for ${application.property_name} has been approved. Our team will contact you with the next steps.`
-      }).catch(error => console.error('Approval email failed:', error));
+      }));
     }
-    return res.json({ success: true, message: 'Application approved', enquiry: application });
+    const notificationResults = await Promise.allSettled(notificationJobs);
+    const failed = notificationResults
+      .map((item, index) => ({ item, channel: index === 0 ? 'whatsapp' : 'email' }))
+      .filter(({ item }) => item.status === 'rejected')
+      .map(({ item, channel }) => ({ channel, error: item.reason?.message || 'Notification failed' }));
+
+    return res.json({
+      success: true,
+      message: 'Application approved',
+      enquiry: application,
+      notifications: { sent: failed.length === 0, failures: failed }
+    });
   } catch (error) {
+    if (error instanceof EnquiryTransitionError) {
+      return res.status(error.status).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
     return res.status(500).json({ success: false, message: 'Unable to approve application', error: error.message });
   }
 };

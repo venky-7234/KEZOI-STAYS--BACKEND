@@ -12,6 +12,8 @@
     "migrate:mobile-discounts": "node scripts/migrate-mobile-discounts.js",
     "migrate:gst-pricing": "node scripts/migrate-gst-pricing.js",
     "migrate:whatsapp-integration": "node scripts/migrate-whatsapp-integration.js",
+    "migrate:enquiry-review-audit": "node scripts/migrate-enquiry-review-audit.js",
+    "audit:enquiry-workflow": "node scripts/audit-enquiry-workflow.js",
     "test": "node --test",
     "check": "node --check server.js && node --check src/controllers/application.controller.js && node --check src/controllers/booking.controller.js && node --check src/controllers/property.controller.js && node --check src/controllers/dashboard.controller.js"
   },

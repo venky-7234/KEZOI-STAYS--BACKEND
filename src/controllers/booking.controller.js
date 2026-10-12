@@ -3,6 +3,10 @@ const {
   triggerBookingWhatsAppAutomation
 } = require('../services/whatsapp.service');
 const { validatePhoneNumber, INVALID_MOBILE_MESSAGE } = require('../utils/phoneValidator');
+const {
+  EnquiryTransitionError,
+  validateBookingConversion
+} = require('../services/enquiryWorkflow.service');
 
 const generateBookingReference = () => {
   const now = new Date();
@@ -91,6 +95,33 @@ const createBooking = async (req, res) => {
     );
 
     await client.query('BEGIN');
+
+    let linkedEnquiry = null;
+    if (enquiry_id) {
+      const enquiryResult = await client.query(
+        `SELECT * FROM enquiries WHERE id = $1::bigint FOR UPDATE`,
+        [enquiry_id]
+      );
+      linkedEnquiry = enquiryResult.rows[0];
+      validateBookingConversion(linkedEnquiry);
+      if (String(linkedEnquiry.guest_id) !== String(guest_id) ||
+          String(linkedEnquiry.property_id) !== String(property_id)) {
+        throw new EnquiryTransitionError(
+          'ENQUIRY_BOOKING_MISMATCH',
+          'Booking guest and property must match the linked enquiry'
+        );
+      }
+      const existingBooking = await client.query(
+        `SELECT id FROM bookings WHERE enquiry_id = $1::bigint LIMIT 1`,
+        [enquiry_id]
+      );
+      if (existingBooking.rows.length) {
+        throw new EnquiryTransitionError(
+          'ENQUIRY_ALREADY_CONVERTED',
+          'Enquiry already has a linked booking'
+        );
+      }
+    }
 
     // ==================================================
     // CHECK GUEST
@@ -392,7 +423,7 @@ const createBooking = async (req, res) => {
           $12,
           $13,
           $17,
-          CASE WHEN $12::numeric > 0 THEN $16 ELSE NULL END,
+          CASE WHEN $12::numeric > 0 THEN $16::bigint ELSE NULL END,
           CASE WHEN $12::numeric > 0 THEN CURRENT_TIMESTAMP ELSE NULL END,
 
           $14,
@@ -402,7 +433,7 @@ const createBooking = async (req, res) => {
 
           $15,
 
-          $16
+          $16::bigint
         )
         RETURNING *
         `,
@@ -467,6 +498,14 @@ const createBooking = async (req, res) => {
 
   } catch (error) {
     await client.query('ROLLBACK');
+
+    if (error instanceof EnquiryTransitionError) {
+      return res.status(error.status).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
 
     console.error(
       'Create booking error:',
