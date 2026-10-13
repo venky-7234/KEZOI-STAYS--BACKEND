@@ -2,8 +2,40 @@ const crypto = require('crypto');
 
 const decode = value => Buffer.from(String(value || ''), 'base64');
 
+const getPrivateKey = () => String(process.env.META_FLOW_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+
+const getMetaFlowConfiguration = () => {
+  const appSecretConfigured = Boolean(process.env.META_APP_SECRET);
+  const privateKey = getPrivateKey();
+  const privateKeyConfigured = Boolean(privateKey);
+  let privateKeyValid = false;
+  let publicKeyFingerprint = null;
+
+  if (privateKeyConfigured) {
+    try {
+      const key = crypto.createPrivateKey({
+        key: privateKey,
+        passphrase: process.env.META_FLOW_PRIVATE_KEY_PASSPHRASE || undefined
+      });
+      const publicKey = crypto.createPublicKey(key).export({ type: 'spki', format: 'der' });
+      privateKeyValid = true;
+      publicKeyFingerprint = crypto.createHash('sha256').update(publicKey).digest('hex');
+    } catch (_error) {
+      // Readiness reports only validity, never key material or passphrases.
+    }
+  }
+
+  return {
+    configured: appSecretConfigured && privateKeyConfigured && privateKeyValid,
+    appSecretConfigured,
+    privateKeyConfigured,
+    privateKeyValid,
+    publicKeyFingerprint
+  };
+};
+
 const decryptFlowRequest = body => {
-  const privateKey = String(process.env.META_FLOW_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  const privateKey = getPrivateKey();
   if (!privateKey) throw new Error('META_FLOW_PRIVATE_KEY is not configured');
   const aesKey = crypto.privateDecrypt({
     key: privateKey,
@@ -32,11 +64,15 @@ const encryptFlowResponse = (response, aesKey, iv) => {
 
 const verifyMetaSignature = (rawBody, signature) => {
   const secret = process.env.META_APP_SECRET;
-  if (!secret || !rawBody || !signature?.startsWith('sha256=')) return false;
-  const expected = `sha256=${crypto.createHmac('sha256', secret).update(rawBody).digest('hex')}`;
-  const left = Buffer.from(expected);
-  const right = Buffer.from(signature);
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
+  if (!secret || !Buffer.isBuffer(rawBody) || !/^sha256=[a-fA-F0-9]{64}$/.test(signature || '')) return false;
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest();
+  const received = Buffer.from(signature.slice('sha256='.length), 'hex');
+  return crypto.timingSafeEqual(expected, received);
 };
 
-module.exports = { decryptFlowRequest, encryptFlowResponse, verifyMetaSignature };
+module.exports = {
+  decryptFlowRequest,
+  encryptFlowResponse,
+  getMetaFlowConfiguration,
+  verifyMetaSignature
+};

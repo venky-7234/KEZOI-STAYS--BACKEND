@@ -1,9 +1,20 @@
 const pool = require('../config/database');
 const { findAvailableProperties } = require('../services/availability.service');
-const { decryptFlowRequest, encryptFlowResponse, verifyMetaSignature } = require('../services/metaFlowCrypto.service');
+const {
+  decryptFlowRequest,
+  encryptFlowResponse,
+  getMetaFlowConfiguration,
+  verifyMetaSignature
+} = require('../services/metaFlowCrypto.service');
 
 const dataExchange = async (req, res) => {
   if (!verifyMetaSignature(req.rawBody, req.headers['x-hub-signature-256'])) {
+    const configuration = getMetaFlowConfiguration();
+    console.warn('Meta Flow signature verification failed', {
+      appSecretConfigured: configuration.appSecretConfigured,
+      rawBodyCaptured: Buffer.isBuffer(req.rawBody),
+      signatureHeaderPresent: Boolean(req.headers['x-hub-signature-256'])
+    });
     return res.status(432).type('text/plain').send('Invalid signature');
   }
   try {
@@ -48,10 +59,13 @@ const dataExchange = async (req, res) => {
   }
 };
 
-const health = (_req, res) => res.json({
-  success: true,
-  service: 'meta-flow-data-exchange',
-  configured: Boolean(process.env.META_FLOW_PRIVATE_KEY && process.env.META_APP_SECRET)
-});
+const health = (_req, res) => {
+  const configuration = getMetaFlowConfiguration();
+  return res.json({
+    success: true,
+    service: 'meta-flow-data-exchange',
+    ...configuration
+  });
+};
 
 module.exports = { dataExchange, health };
