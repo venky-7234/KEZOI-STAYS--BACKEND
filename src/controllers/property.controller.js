@@ -279,6 +279,9 @@ const updateProperty = async (req, res) => {
       included_guests,
       extra_guest_price,
       airbnb_url,
+      public_description,
+      public_location,
+      public_amenities,
       status
     } = req.body;
 
@@ -351,8 +354,11 @@ const updateProperty = async (req, res) => {
         extra_guest_price = COALESCE($12, extra_guest_price),
         airbnb_url = COALESCE($13, airbnb_url),
         status = COALESCE($14, status),
+        public_description = COALESCE($15, public_description),
+        public_location = COALESCE($16, public_location),
+        public_amenities = COALESCE($17::text[], public_amenities),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $15
+      WHERE id = $18
       RETURNING *
       `,
       [
@@ -370,6 +376,9 @@ const updateProperty = async (req, res) => {
         extra_guest_price ?? null,
         airbnb_url || null,
         status == null ? null : normalizedStatus,
+        public_description ?? null,
+        public_location ?? null,
+        public_amenities == null ? null : (Array.isArray(public_amenities) ? public_amenities.map(String) : null),
         id
       ]
     );

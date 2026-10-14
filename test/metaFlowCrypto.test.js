@@ -53,3 +53,24 @@ test('decrypts a Meta-style request and encrypts a flipped-IV response', () => {
   assert.match(configuration.publicKeyFingerprint, /^[a-f0-9]{64}$/);
   delete process.env.META_FLOW_PRIVATE_KEY;
 });
+
+test('round-trips encrypted request and response envelopes for every premium Flow screen', () => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  process.env.META_FLOW_PRIVATE_KEY = privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const screens = ['BOOKING_DETAILS', 'PROPERTY_SELECTION', 'PROPERTY_DETAILS', 'CALENDAR', 'GUEST_SELECTION', 'LIVE_QUOTE', 'GUEST_DETAILS', 'BOOKING_REVIEW'];
+  for (const screen of screens) {
+    const aesKey = crypto.randomBytes(16); const iv = crypto.randomBytes(12);
+    const request = { action: 'data_exchange', screen, flow_token: 'test-flow-token', data: { property_id: '1' } };
+    const cipher = crypto.createCipheriv('aes-128-gcm', aesKey, iv);
+    const encrypted = Buffer.concat([cipher.update(JSON.stringify(request)), cipher.final(), cipher.getAuthTag()]);
+    const envelope = { encrypted_aes_key: crypto.publicEncrypt({ key: publicKey, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, aesKey).toString('base64'), encrypted_flow_data: encrypted.toString('base64'), initial_vector: iv.toString('base64') };
+    const decrypted = decryptFlowRequest(envelope); assert.deepEqual(decrypted.data, request);
+    const response = { screen, data: { verified_screen: screen } };
+    const ciphertext = Buffer.from(encryptFlowResponse(response, decrypted.aesKey, decrypted.iv), 'base64');
+    const decipher = crypto.createDecipheriv('aes-128-gcm', aesKey, Buffer.from(iv.map(byte => ~byte & 0xff)));
+    decipher.setAuthTag(ciphertext.subarray(-16));
+    const plaintext = Buffer.concat([decipher.update(ciphertext.subarray(0, -16)), decipher.final()]);
+    assert.deepEqual(JSON.parse(plaintext.toString()), response);
+  }
+  delete process.env.META_FLOW_PRIVATE_KEY;
+});

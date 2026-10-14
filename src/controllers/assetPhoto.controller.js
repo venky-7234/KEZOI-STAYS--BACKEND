@@ -1,5 +1,58 @@
 const pool = require('../config/database');
 
+const validateMetaImage = value => {
+  const base64 = String(value || '').replace(/^data:image\/(?:png|jpeg);base64,/, '');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) return { error: 'meta_image_base64 must be raw JPEG or PNG base64' };
+  const bytes = Buffer.from(base64, 'base64');
+  const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const png = bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  if (!jpeg && !png) return { error: 'Only JPEG and PNG carousel images are supported' };
+  if (bytes.length > 1024 * 1024) return { error: 'Carousel images must not exceed 1 MB' };
+  return { base64 };
+};
+
+const listMarketingPhotos = async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT id, property_id, image_url, alt_text, caption, display_order,
+      is_cover, is_active, created_at, updated_at FROM property_marketing_photos
+      WHERE property_id=$1 ORDER BY is_cover DESC, display_order, id`, [req.params.propertyId]);
+    return res.json({ success: true, total: result.rows.length, photos: result.rows });
+  } catch (error) { return res.status(500).json({ success: false, message: 'Unable to load marketing gallery' }); }
+};
+
+const addMarketingPhoto = async (req, res) => {
+  const image = validateMetaImage(req.body.meta_image_base64);
+  if (image.error || !String(req.body.alt_text || '').trim()) return res.status(400).json({ success: false, message: image.error || 'alt_text is required' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (req.body.is_cover === true) await client.query('UPDATE property_marketing_photos SET is_cover=FALSE,updated_at=NOW() WHERE property_id=$1', [req.body.property_id]);
+    const result = await client.query(`INSERT INTO property_marketing_photos(property_id,image_url,meta_image_base64,alt_text,caption,display_order,is_cover,is_active)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,property_id,image_url,alt_text,caption,display_order,is_cover,is_active,created_at,updated_at`,
+      [req.body.property_id, req.body.image_url || null, image.base64, String(req.body.alt_text).trim(), req.body.caption || null, Number(req.body.display_order || 0), req.body.is_cover === true, req.body.is_active !== false]);
+    await client.query('COMMIT');
+    return res.status(201).json({ success: true, photo: result.rows[0] });
+  } catch (error) { await client.query('ROLLBACK'); return res.status(500).json({ success: false, message: 'Unable to add marketing photo' }); }
+  finally { client.release(); }
+};
+
+const updateMarketingPhoto = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query('SELECT * FROM property_marketing_photos WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!current.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'Marketing photo not found' }); }
+    let base64 = current.rows[0].meta_image_base64;
+    if (req.body.meta_image_base64 != null) { const image = validateMetaImage(req.body.meta_image_base64); if (image.error) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: image.error }); } base64 = image.base64; }
+    if (req.body.is_cover === true) await client.query('UPDATE property_marketing_photos SET is_cover=FALSE,updated_at=NOW() WHERE property_id=$1 AND id<>$2', [current.rows[0].property_id, req.params.id]);
+    const result = await client.query(`UPDATE property_marketing_photos SET image_url=$1,meta_image_base64=$2,alt_text=$3,caption=$4,display_order=$5,is_cover=$6,is_active=$7,updated_at=NOW()
+      WHERE id=$8 RETURNING id,property_id,image_url,alt_text,caption,display_order,is_cover,is_active,created_at,updated_at`,
+      [req.body.image_url ?? current.rows[0].image_url, base64, req.body.alt_text ?? current.rows[0].alt_text, req.body.caption ?? current.rows[0].caption, req.body.display_order ?? current.rows[0].display_order, req.body.is_cover ?? current.rows[0].is_cover, req.body.is_active ?? current.rows[0].is_active, req.params.id]);
+    await client.query('COMMIT'); return res.json({ success: true, photo: result.rows[0] });
+  } catch (error) { await client.query('ROLLBACK'); return res.status(500).json({ success: false, message: 'Unable to update marketing photo' }); }
+  finally { client.release(); }
+};
+
 // ======================================================
 // ADD ASSET PHOTO
 // ======================================================
@@ -309,5 +362,8 @@ module.exports = {
   getAssetPhotos,
   getPropertyPhotos,
   updateAssetPhoto,
-  deleteAssetPhoto
+  deleteAssetPhoto,
+  listMarketingPhotos,
+  addMarketingPhoto,
+  updateMarketingPhoto
 };

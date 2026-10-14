@@ -5,7 +5,10 @@ const {
   getAssetPhotos,
   getPropertyPhotos,
   updateAssetPhoto,
-  deleteAssetPhoto
+  deleteAssetPhoto,
+  listMarketingPhotos,
+  addMarketingPhoto,
+  updateMarketingPhoto
 } = require('../controllers/assetPhoto.controller');
 
 const authenticate =
@@ -29,6 +32,10 @@ router.post(
   '/',
   addAssetPhoto
 );
+
+router.post('/marketing', addMarketingPhoto);
+router.get('/marketing/property/:propertyId', listMarketingPhotos);
+router.patch('/marketing/:id', updateMarketingPhoto);
 
 router.get(
   '/asset/:assetId',
