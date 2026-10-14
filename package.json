@@ -14,6 +14,7 @@
     "migrate:whatsapp-integration": "node scripts/migrate-whatsapp-integration.js",
     "migrate:enquiry-review-audit": "node scripts/migrate-enquiry-review-audit.js",
     "migrate:whatsapp-flow-content": "node scripts/migrate-whatsapp-flow-content.js",
+    "import:property-flow-content": "node scripts/import-property-flow-content.js",
     "audit:enquiry-workflow": "node scripts/audit-enquiry-workflow.js",
     "test": "node --test",
     "check": "node --check server.js && node --check src/controllers/application.controller.js && node --check src/controllers/booking.controller.js && node --check src/controllers/property.controller.js && node --check src/controllers/dashboard.controller.js"
@@ -34,7 +35,8 @@
     "multer": "^2.4.0",
     "openai": "^7.23.0",
     "pg": "^8.23.0",
-    "resend": "^6.31.0"
+    "resend": "^6.31.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

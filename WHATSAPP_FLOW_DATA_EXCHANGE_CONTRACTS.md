@@ -14,6 +14,32 @@ All requests and responses use the existing Meta RSA-OAEP/AES-GCM envelope. The 
 - A screen validation failure stays on the requesting screen and returns `{ "error_message": "..." }`.
 - `flow_token` is used to derive a non-PII, stable idempotency key at final submission.
 
+## Selected-property entry screens
+
+The carousel passes only backend identifiers; it does not pass property content, availability, pricing, image bytes, or GST.
+
+### View Stay
+
+Initial screen: `VIEW_STAY_ENTRY`
+
+```json
+{"property_id":"1","property_code":"TG-0001","entry_intent":"view_stay"}
+```
+
+The entry screen sends a `data_exchange` request with the same fields. The backend reads the active property and responds with `PROPERTY_DETAILS`, including description, location, amenities, `amenities_text`, capacity and up to three active gallery images.
+
+### Reserve
+
+Initial screen: `RESERVE_ENTRY`
+
+```json
+{"property_id":"1","property_code":"TG-0001","entry_intent":"reserve"}
+```
+
+The entry screen sends a `data_exchange` request with the same fields. The backend reads the property and live unavailable dates and responds with `CALENDAR`. Dates, guests, price and GST continue through the existing backend-owned transitions.
+
+Meta `navigate` can provide initial screen data without requiring n8n to duplicate property content, but dynamic content is not fetched until an action reaches the Data Exchange endpoint. The two lightweight entry screens therefore require one guest tap. If the installed Meta client supplies the same selected-property data in an encrypted `INIT` request, the backend also routes `INIT` directly to `PROPERTY_DETAILS` or `CALENDAR`; this optimization must not be claimed until verified in Meta's client/tester.
+
 ## 1. `BOOKING_DETAILS` → `PROPERTY_SELECTION`
 
 Request data:
@@ -45,7 +71,7 @@ Response data:
   "property_id":"1","property_name":"<database name>",
   "property_description":"<admin public_description>",
   "property_location":"<admin public_location>",
-  "amenities":["Wi-Fi","Kitchen"],"max_guests":8,
+  "amenities":["Wi-Fi","Kitchen"],"amenities_text":"Wi-Fi • Kitchen","max_guests":8,
   "gallery":[{"src":"<raw JPEG/PNG base64>","alt-text":"Living room"}]
 }
 ```
@@ -56,7 +82,7 @@ The draft Flow `ImageCarousel.images` binds to `${data.gallery}`. The backend re
 - `GET /api/operations/photos/marketing/property/{propertyId}`
 - `PATCH /api/operations/photos/marketing/{id}`
 
-JPEG/PNG bytes are validated and limited to 1 MB per image. `image_url` may be retained for admin provenance, but the runtime Flow receives embedded base64, not a URL.
+The admin API accepts either JPEG/PNG base64 or an HTTPS URL on an approved property-image host. Existing WebP S3 images are downloaded by exact URL and converted to JPEG. URL-derived images use a conservative 240 KB per-image budget so three base64 images plus the rest of the encrypted response remain within Meta's 1 MB data-channel payload limit. `image_url` is retained for provenance, but the runtime Flow receives embedded base64, not a URL. Changing an admin gallery URL regenerates its Meta image data.
 
 ## 3. `PROPERTY_DETAILS` → `CALENDAR`
 
@@ -148,7 +174,7 @@ Flow JSON 7.3 supports `ImageCarousel` (introduced in 7.1). The component consum
 ## Deployment and verification status
 
 - Implemented: migration `008_whatsapp_flow_property_content.sql`, gallery admin routes, property content fields, all eight Data Exchange transitions, transactional finalization, and safe continuation.
-- Local automated verification: 26 tests passed, 0 failed on 14 October 2026.
+- Local automated verification: 29 tests passed, 0 failed on 14 October 2026.
 - Encrypted coverage: signature verification, RSA-OAEP/AES-GCM request decryption, flipped-IV response encryption, and envelope round trips for all eight requesting screens.
 - Syntax verification: project `npm run check` plus the new service, gallery controller, property controller, and migration runner passed.
 - Pending deployment: run `npm run migrate:whatsapp-flow-content` in the intended environment, deploy the backend, populate property content/gallery, then run an encrypted smoke journey against that environment.

@@ -1,0 +1,16 @@
+{
+  "property_code": "TG-0001",
+  "property_name": "Kezoi Stays Manikonda",
+  "public_description": "Experience unparalleled luxury in the heart of Hyderabad. Our residence offers a seamless blend of elegant design, modern amenities, and personalized service.\n\nWhether you are traveling for business or leisure, our meticulously curated spaces ensure that every moment of your stay is effortlessly relaxing and entirely unforgettable.",
+  "public_location": "Kezoi Stays, Flat 1002, 10th Floor, E-Block, Manikonda, Gandipet Mandal, Ranga Reddy District, Telangana 500089, India",
+  "public_amenities": ["Hair dryer","Cleaning products","Shampoo","Conditioner","Body soap","Hot water","Washer","Essentials","Hangers","Bed linens","Extra pillows & blankets","Room-darkening shades","Iron","Drying rack","Clothing storage","TV","Books & reading material","Board games","Air conditioning","Ceiling fan","Exterior security cameras","Smoke alarm","Fire extinguisher","First aid kit","Wi-Fi","Kitchen","Refrigerator","Microwave","Cooking basics","Dishes & silverware","Freezer","Stove","Hot water kettle","Wine glasses","Blender","Rice maker","Dining table","Coffee","Outdoor furniture","Free parking on premises","Elevator","Composting","Long-term stays allowed","Daily housekeeping"],
+  "gallery": [
+    {"image_url":"https://vioraelite.s3.eu-north-1.amazonaws.com/kezoi/A+Kezoi_Updated/living-room/IMG_6309.webp","alt_text":"Living room with seating and access to the private balcony","caption":"Living room","display_order":0,"is_cover":true,"is_active":true},
+    {"image_url":"https://vioraelite.s3.eu-north-1.amazonaws.com/kezoi/A+Kezoi_Updated/bed-room-1/IMG_6285.webp","alt_text":"Master bedroom with a king-size bed","caption":"Master bedroom","display_order":1,"is_cover":false,"is_active":true},
+    {"image_url":"https://vioraelite.s3.eu-north-1.amazonaws.com/kezoi/A+Kezoi_Updated/bed-room-2/IMG_6166.webp","alt_text":"Bedroom 2 with a queen-size bed and balcony access","caption":"Bedroom 2","display_order":2,"is_cover":false,"is_active":true},
+    {"image_url":"https://vioraelite.s3.eu-north-1.amazonaws.com/kezoi/A+Kezoi_Updated/bed-room-3/IMG_6231.webp","alt_text":"Bedroom 3 with a queen-size bed and balcony access","caption":"Bedroom 3","display_order":3,"is_cover":false,"is_active":true},
+    {"image_url":"https://vioraelite.s3.eu-north-1.amazonaws.com/kezoi/A+Kezoi_Updated/bed-room-2/IMG_6188.webp","alt_text":"Private balcony connected to Bedroom 2","caption":"Bedroom 2 balcony","display_order":4,"is_cover":false,"is_active":true},
+    {"image_url":"https://vioraelite.s3.eu-north-1.amazonaws.com/kezoi/A+Kezoi_Updated/dining/A6707476.webp","alt_text":"Dining area for shared meals and gatherings","caption":"Dining area","display_order":5,"is_cover":false,"is_active":true},
+    {"image_url":"https://vioraelite.s3.eu-north-1.amazonaws.com/kezoi/A+Kezoi_Updated/dining/A6707487.webp","alt_text":"Dining table and seating in the apartment dining area","caption":"Dining area","display_order":6,"is_cover":false,"is_active":true}
+  ]
+}

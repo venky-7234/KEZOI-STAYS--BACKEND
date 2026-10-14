@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const { imageUrlToMetaBase64 } = require('../services/metaImage.service');
 
 const validateMetaImage = value => {
   const base64 = String(value || '').replace(/^data:image\/(?:png|jpeg);base64,/, '');
@@ -7,7 +8,7 @@ const validateMetaImage = value => {
   const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   const png = bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   if (!jpeg && !png) return { error: 'Only JPEG and PNG carousel images are supported' };
-  if (bytes.length > 1024 * 1024) return { error: 'Carousel images must not exceed 1 MB' };
+  if (bytes.length > 240 * 1024) return { error: 'Carousel images must not exceed the safe 240 KB per-image budget' };
   return { base64 };
 };
 
@@ -21,8 +22,11 @@ const listMarketingPhotos = async (req, res) => {
 };
 
 const addMarketingPhoto = async (req, res) => {
-  const image = validateMetaImage(req.body.meta_image_base64);
-  if (image.error || !String(req.body.alt_text || '').trim()) return res.status(400).json({ success: false, message: image.error || 'alt_text is required' });
+  if (!String(req.body.alt_text || '').trim() || (!req.body.meta_image_base64 && !req.body.image_url)) return res.status(400).json({ success: false, message: 'alt_text and image_url or meta_image_base64 are required' });
+  let image;
+  try { image = req.body.meta_image_base64 ? validateMetaImage(req.body.meta_image_base64) : { base64: await imageUrlToMetaBase64(req.body.image_url) }; }
+  catch (error) { return res.status(400).json({ success: false, message: error.message }); }
+  if (image.error) return res.status(400).json({ success: false, message: image.error });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -44,6 +48,10 @@ const updateMarketingPhoto = async (req, res) => {
     if (!current.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'Marketing photo not found' }); }
     let base64 = current.rows[0].meta_image_base64;
     if (req.body.meta_image_base64 != null) { const image = validateMetaImage(req.body.meta_image_base64); if (image.error) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: image.error }); } base64 = image.base64; }
+    else if (req.body.image_url != null && req.body.image_url !== current.rows[0].image_url) {
+      try { base64 = await imageUrlToMetaBase64(req.body.image_url); }
+      catch (error) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: error.message }); }
+    }
     if (req.body.is_cover === true) await client.query('UPDATE property_marketing_photos SET is_cover=FALSE,updated_at=NOW() WHERE property_id=$1 AND id<>$2', [current.rows[0].property_id, req.params.id]);
     const result = await client.query(`UPDATE property_marketing_photos SET image_url=$1,meta_image_base64=$2,alt_text=$3,caption=$4,display_order=$5,is_cover=$6,is_active=$7,updated_at=NOW()
       WHERE id=$8 RETURNING id,property_id,image_url,alt_text,caption,display_order,is_cover,is_active,created_at,updated_at`,
