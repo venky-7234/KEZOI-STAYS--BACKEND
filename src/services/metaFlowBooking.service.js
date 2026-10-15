@@ -13,14 +13,29 @@ const SCREENS = Object.freeze({
 const asDate = value => value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
 const money = value => Number(Number(value || 0).toFixed(2));
 const errorResponse = (screen, message) => ({ screen, data: { error_message: message } });
+const SCREEN_DATA_FIELDS = Object.freeze({
+  [SCREENS.PROPERTIES]: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'quote_generated_at', 'error_message'],
+  [SCREENS.DETAILS]: ['property_id', 'property_name', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'error_message'],
+  [SCREENS.CALENDAR]: ['property_id', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'unavailable_dates', 'calendar_refreshed_at', 'error_message'],
+  [SCREENS.GUESTS]: ['property_id', 'check_in', 'check_out', 'max_guests', 'adults', 'children', 'infants', 'pets', 'error_message'],
+  [SCREENS.QUOTE]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'quote_generated_at'],
+  [SCREENS.GUEST_DETAILS]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'error_message'],
+  [SCREENS.REVIEW]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'quote', 'quote_generated_at', 'error_message'],
+  [SCREENS.COMPLETE]: ['enquiry_reference', 'enquiry_status', 'payment_status', 'continuation_type', 'continuation_url', 'replayed', 'message']
+});
+const screenResponse = (screen, data) => ({
+  screen,
+  data: Object.fromEntries((SCREEN_DATA_FIELDS[screen] || []).filter(key => data[key] !== undefined).map(key => [key, data[key]]))
+});
 const counts = data => ({ adults: data.adults, children: data.children ?? 0, infants: data.infants ?? 0, pets: data.pets ?? 0 });
 const stayInput = data => ({ check_in: data.check_in, check_out: data.check_out, ...counts(data) });
 
-const propertyDetails = async (db, propertyId) => {
+const propertyDetails = async (db, propertyId, propertyCode) => {
   const result = await db.query(`SELECT id, property_code, property_name, property_type, area, city,
     bedrooms, bathrooms, max_guests, public_description, public_location, public_amenities
     FROM properties WHERE id=$1 AND status='ACTIVE'`, [propertyId]);
   if (!result.rows.length) return null;
+  if (propertyCode && String(result.rows[0].property_code) !== String(propertyCode)) return null;
   const photos = await db.query(`SELECT id, alt_text, caption, meta_image_base64, display_order, is_cover
     FROM property_marketing_photos WHERE property_id=$1 AND is_active=TRUE
     ORDER BY is_cover DESC, display_order, id LIMIT 3`, [propertyId]);
@@ -126,62 +141,65 @@ const continuation = enquiry => {
 
 const handleFlowAction = async (db, payload) => {
   if (payload.action === 'ping') return { data: { status: 'active' } };
-  const data = { ...(payload.data || {}), flow_token: payload.flow_token || payload.data?.flow_token };
-  if (payload.action === 'INIT') {
+  const data = { ...(payload.data || {}) };
+  if (payload.action !== 'INIT' && payload.action !== 'data_exchange') {
+    return errorResponse(payload.screen || SCREENS.START, 'Unsupported Flow action');
+  }
+  if (payload.action === 'INIT' || !payload.screen) {
     if (data.entry_intent === 'view_stay') payload.screen = SCREENS.VIEW_ENTRY;
     else if (data.entry_intent === 'reserve') payload.screen = SCREENS.RESERVE_ENTRY;
-    else return errorResponse(SCREENS.START, 'A supported entry intent is required');
-  } else if (payload.action !== 'data_exchange') return errorResponse(payload.screen || SCREENS.START, 'Unsupported Flow action');
+    else if (payload.action === 'INIT') return errorResponse(SCREENS.START, 'A supported entry intent is required');
+  }
   if (payload.screen === SCREENS.VIEW_ENTRY) {
-    const property = await propertyDetails(db, data.property_id);
+    const property = await propertyDetails(db, data.property_id, data.property_code);
     if (!property) return errorResponse(SCREENS.VIEW_ENTRY, 'Property not found or inactive');
     const amenities = property.public_amenities || [];
-    return { screen: SCREENS.DETAILS, data: { ...data, property_id: String(property.id), property_name: property.property_name, property_description: property.public_description || '', property_location: property.public_location || [property.area, property.city].filter(Boolean).join(', '), amenities, amenities_text: amenities.join(' • '), max_guests: Number(property.max_guests || 0), gallery: property.photos.map(photo => ({ src: photo.meta_image_base64, 'alt-text': photo.alt_text })) } };
+    return screenResponse(SCREENS.DETAILS, { ...data, property_id: String(property.id), property_name: property.property_name, property_description: property.public_description || '', property_location: property.public_location || [property.area, property.city].filter(Boolean).join(', '), amenities, amenities_text: amenities.join(' • '), max_guests: Number(property.max_guests || 0), gallery: property.photos.map(photo => ({ src: photo.meta_image_base64, 'alt-text': photo.alt_text })) });
   }
   if (payload.screen === SCREENS.RESERVE_ENTRY) {
-    const property = await propertyDetails(db, data.property_id);
+    const property = await propertyDetails(db, data.property_id, data.property_code);
     if (!property) return errorResponse(SCREENS.RESERVE_ENTRY, 'Property not found or inactive');
-    return { screen: SCREENS.CALENDAR, data: { ...data, property_id: String(property.id), property_name: property.property_name, unavailable_dates: await unavailableDates(db, property.id), calendar_refreshed_at: new Date().toISOString() } };
+    return screenResponse(SCREENS.CALENDAR, { ...data, property_id: String(property.id), unavailable_dates: await unavailableDates(db, property.id), calendar_refreshed_at: new Date().toISOString() });
   }
   if (payload.screen === SCREENS.START) {
     const guests = data.guests == null ? data.adults : data.guests;
     const result = await findAvailableProperties(db, { check_in: data.check_in, check_out: data.check_out, adults: guests, children: data.children ?? 0, infants: data.infants ?? 0, pets: data.pets ?? 0 });
     if (result.error) return errorResponse(SCREENS.START, result.error);
-    return { screen: SCREENS.PROPERTIES, data: { ...data, adults: String(guests), properties: result.properties.map(p => ({ id: String(p.id), title: p.property_name, description: `${p.bedrooms || 0} bedrooms | ${p.bathrooms || 0} bathrooms | ${p.quote.currency} ${p.quote.total_amount}` })), no_properties_available: !result.properties.length, quote_generated_at: new Date().toISOString() } };
+    return screenResponse(SCREENS.PROPERTIES, { ...data, adults: String(guests), properties: result.properties.map(p => ({ id: String(p.id), title: p.property_name, description: `${p.bedrooms || 0} bedrooms | ${p.bathrooms || 0} bathrooms | ${p.quote.currency} ${p.quote.total_amount}` })), no_properties_available: !result.properties.length, quote_generated_at: new Date().toISOString() });
   }
   if (payload.screen === SCREENS.PROPERTIES) {
-    const property = await propertyDetails(db, data.property_id);
+    const property = await propertyDetails(db, data.property_id, data.property_code);
     if (!property) return errorResponse(SCREENS.PROPERTIES, 'Property not found or inactive');
     const amenities = property.public_amenities || [];
-    return { screen: SCREENS.DETAILS, data: { ...data, property_id: String(property.id), property_name: property.property_name, property_description: property.public_description || '', property_location: property.public_location || [property.area, property.city].filter(Boolean).join(', '), amenities, amenities_text: amenities.join(' • '), max_guests: Number(property.max_guests || 0), gallery: property.photos.map(photo => ({ src: photo.meta_image_base64, 'alt-text': photo.alt_text })) } };
+    return screenResponse(SCREENS.DETAILS, { ...data, property_id: String(property.id), property_name: property.property_name, property_description: property.public_description || '', property_location: property.public_location || [property.area, property.city].filter(Boolean).join(', '), amenities, amenities_text: amenities.join(' • '), max_guests: Number(property.max_guests || 0), gallery: property.photos.map(photo => ({ src: photo.meta_image_base64, 'alt-text': photo.alt_text })) });
   }
-  if (payload.screen === SCREENS.DETAILS) return { screen: SCREENS.CALENDAR, data: { ...data, unavailable_dates: await unavailableDates(db, data.property_id), calendar_refreshed_at: new Date().toISOString() } };
+  if (payload.screen === SCREENS.DETAILS) return screenResponse(SCREENS.CALENDAR, { ...data, unavailable_dates: await unavailableDates(db, data.property_id), calendar_refreshed_at: new Date().toISOString() });
   if (payload.screen === SCREENS.CALENDAR) {
     const parsed = parseStay(stayInput({ ...data, adults: data.adults || 1 }));
     if (parsed.error) return errorResponse(SCREENS.CALENDAR, parsed.error);
     const blocked = await unavailableDates(db, data.property_id);
     const selected = new Set(); for (let day = new Date(`${data.check_in}T00:00:00Z`), end = new Date(`${data.check_out}T00:00:00Z`); day < end; day = new Date(day.getTime() + 86400000)) selected.add(day.toISOString().slice(0, 10));
     if (blocked.some(date => selected.has(date))) return errorResponse(SCREENS.CALENDAR, 'One or more selected dates are no longer available');
-    const property = await propertyDetails(db, data.property_id);
+    const property = await propertyDetails(db, data.property_id, data.property_code);
     if (!property) return errorResponse(SCREENS.CALENDAR, 'Property not found or inactive');
-    return { screen: SCREENS.GUESTS, data: { ...data, max_guests: Number(property?.max_guests || 0) } };
+    return screenResponse(SCREENS.GUESTS, { ...data, max_guests: Number(property?.max_guests || 0) });
   }
   if (payload.screen === SCREENS.GUESTS) {
     const priced = await selectedQuote(db, data); if (priced.error) return errorResponse(SCREENS.GUESTS, priced.error);
     const q = priced.property.quote;
-    return { screen: SCREENS.QUOTE, data: { ...data, property_name: priced.property.property_name, nights: q.nights, currency: q.currency, base_amount: money(q.base_amount), extra_guests: q.extra_guests, extra_guest_amount: money(q.extra_guest_amount), taxable_amount: money(q.taxable_amount), gst_rate: q.gst_rate, cgst_amount: money(q.cgst_amount), sgst_amount: money(q.sgst_amount), gst_amount: money(q.gst_amount), total_amount: money(q.total_amount), quote_generated_at: new Date().toISOString() } };
+    return screenResponse(SCREENS.QUOTE, { ...data, property_name: priced.property.property_name, nights: q.nights, currency: q.currency, base_amount: money(q.base_amount), extra_guests: q.extra_guests, extra_guest_amount: money(q.extra_guest_amount), taxable_amount: money(q.taxable_amount), gst_rate: q.gst_rate, cgst_amount: money(q.cgst_amount), sgst_amount: money(q.sgst_amount), gst_amount: money(q.gst_amount), total_amount: money(q.total_amount), quote_generated_at: new Date().toISOString() });
   }
-  if (payload.screen === SCREENS.QUOTE) return { screen: SCREENS.GUEST_DETAILS, data };
+  if (payload.screen === SCREENS.QUOTE) return screenResponse(SCREENS.GUEST_DETAILS, data);
   if (payload.screen === SCREENS.GUEST_DETAILS) {
     const priced = await selectedQuote(db, data); if (priced.error) return errorResponse(SCREENS.GUEST_DETAILS, priced.error);
     const phone = validatePhoneNumber(data.whatsapp_number, data.country_code || 'IN');
     if (!String(data.guest_name || '').trim()) return errorResponse(SCREENS.GUEST_DETAILS, 'Guest name is required');
     if (!phone.valid || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(data.guest_email || '').trim())) return errorResponse(SCREENS.GUEST_DETAILS, 'Enter a valid email address and WhatsApp number');
-    return { screen: SCREENS.REVIEW, data: { ...data, whatsapp_number: phone.normalizedNumber, property_name: priced.property.property_name, quote: priced.property.quote, quote_generated_at: new Date().toISOString() } };
+    return screenResponse(SCREENS.REVIEW, { ...data, whatsapp_number: phone.normalizedNumber, property_name: priced.property.property_name, quote: priced.property.quote, quote_generated_at: new Date().toISOString() });
   }
   if (payload.screen === SCREENS.REVIEW) {
-    const result = await createPendingEnquiry(db, data); if (result.error) return errorResponse(SCREENS.REVIEW, result.error);
-    return { screen: SCREENS.COMPLETE, data: { enquiry_reference: `APP-${result.enquiry.id}`, enquiry_status: result.enquiry.status, payment_status: 'NOT_STARTED', continuation_type: 'IDENTITY_DOCUMENT_UPLOAD', continuation_url: continuation(result.enquiry), replayed: result.replayed, message: 'Enquiry created. No booking or payment has been confirmed.' } };
+    const result = await createPendingEnquiry(db, { ...data, flow_token: payload.flow_token || data.flow_token }); if (result.error) return errorResponse(SCREENS.REVIEW, result.error);
+    return screenResponse(SCREENS.COMPLETE, { enquiry_reference: `APP-${result.enquiry.id}`, enquiry_status: result.enquiry.status, payment_status: 'NOT_STARTED', continuation_type: 'IDENTITY_DOCUMENT_UPLOAD', continuation_url: continuation(result.enquiry), replayed: result.replayed, message: 'Enquiry created. No booking or payment has been confirmed.' });
   }
   return errorResponse(payload.screen || SCREENS.START, 'Unsupported Flow screen');
 };
