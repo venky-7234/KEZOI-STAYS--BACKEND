@@ -46,6 +46,8 @@ const applicationRoutes =
   require('./src/routes/application.routes');
 const whatsappRoutes =
   require('./src/routes/whatsapp.routes');
+const testWhatsappRoutes =
+  require('./src/routes/testWhatsapp.routes');
 const discountOfferRoutes = require('./src/routes/discountOffer.routes');
 const integrationRoutes = require('./src/routes/integration.routes');
 const metaFlowRoutes = require('./src/routes/metaFlow.routes');
@@ -226,8 +228,13 @@ app.use(
 );
 
 app.use(
-  '/api/test/whatsapp',
+  '/api/whatsapp',
   whatsappRoutes
+);
+
+app.use(
+  '/api/test/whatsapp',
+  testWhatsappRoutes
 );
 // ======================================================
 // 404

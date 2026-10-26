@@ -1,13 +1,12 @@
 const express = require('express');
 const {
-  testWhatsAppAutomation
-} = require('../controllers/whatsapp.controller');
+  verifyWebhook,
+  handleWebhook
+} = require('../controllers/whatsappWebhook.controller');
 
 const router = express.Router();
 
-router.post(
-  '/',
-  testWhatsAppAutomation
-);
+router.get('/webhook', verifyWebhook);
+router.post('/webhook', handleWebhook);
 
 module.exports = router;
