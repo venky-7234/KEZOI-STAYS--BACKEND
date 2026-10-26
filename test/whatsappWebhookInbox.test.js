@@ -169,7 +169,7 @@ test('normalizeAndAllowlistEvent excludes free-text bodies and media URLs for da
   const normText = normalizeAndAllowlistEvent(textEvent);
   assert.equal(normText.event_type, 'text');
   assert.deepEqual(normText.payload, {});
-  assert.equal(normText.processing_status, 'IGNORED');
+  assert.equal(normText.processing_status, 'PENDING');
 
   // 2. Media message
   const mediaEvent = {

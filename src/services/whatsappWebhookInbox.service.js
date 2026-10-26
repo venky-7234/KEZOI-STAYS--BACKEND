@@ -100,7 +100,7 @@ const normalizeAndAllowlistEvent = (rawEvent) => {
       eventType = 'text';
       // In compliance with privacy guidelines, text bodies are NEVER persisted
       payload = {};
-      processingStatus = 'IGNORED';
+      processingStatus = 'PENDING';
     } else if (rawEvent.type === 'interactive') {
       eventType = rawEvent.interactiveType || 'interactive';
       if (rawEvent.buttonId) payload.button_id = String(rawEvent.buttonId).trim();

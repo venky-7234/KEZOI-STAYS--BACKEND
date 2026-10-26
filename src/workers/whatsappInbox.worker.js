@@ -8,6 +8,10 @@ const {
   isFlowCompletionEvent,
   convertFlowInboxEventToEnquiry
 } = require('../services/whatsappFlowEnquiry.service');
+const {
+  isOrdinaryTextMessageEvent,
+  processOrdinaryMessageFollowUp
+} = require('../services/whatsappMessageFollowUp.service');
 const { sanitizeErrorMessage } = require('../services/whatsappCloudApi.service');
 
 /**
@@ -67,7 +71,7 @@ const createWorker = (options = {}) => {
         return { processed: false, reason: 'NO_ELIGIBLE_EVENTS' };
       }
 
-      // 2. Branch: Flow completion event vs non-Flow event
+      // 2. Branch A: Interactive WhatsApp Flow completion event
       if (isFlowCompletionEvent(event)) {
         const result = await convertFlowInboxEventToEnquiry({
           event,
@@ -101,7 +105,40 @@ const createWorker = (options = {}) => {
         };
       }
 
-      // 3. Non-Flow event: mark IGNORED according to durable inbox state model
+      // 2. Branch B: Ordinary inbound text message event
+      if (isOrdinaryTextMessageEvent(event)) {
+        const result = await processOrdinaryMessageFollowUp({
+          event,
+          workerId,
+          dbPool,
+          maxRetries
+        });
+
+        if (result.success) {
+          console.log('WhatsApp inbox worker: Ordinary message follow-up recorded', {
+            workerId,
+            eventId: event.id,
+            followUpId: result.followUpId,
+            replayed: Boolean(result.replayed)
+          });
+        } else {
+          console.warn('WhatsApp inbox worker: Ordinary message follow-up failed or lease lost', {
+            workerId,
+            eventId: event.id,
+            reason: result.reason || undefined,
+            error: result.error ? sanitizeErrorMessage(result.error) : undefined
+          });
+        }
+
+        return {
+          processed: true,
+          eventId: event.id,
+          eventKind: 'follow-up',
+          result
+        };
+      }
+
+      // 3. Branch C: Non-Flow / unsupported event (status, media, etc.): mark IGNORED
       const ignoreResult = await markEventIgnored(
         event.id,
         workerId,

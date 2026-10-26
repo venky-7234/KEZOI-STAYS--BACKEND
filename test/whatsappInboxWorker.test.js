@@ -139,6 +139,23 @@ const createWorkerMockDb = (options = {}) => {
         return { rows: [existingEnquiry], rowCount: 1 };
       }
 
+      // Insert follow-up
+      if (sql.includes('INSERT INTO whatsapp_message_follow_ups')) {
+        return {
+          rows: [{
+            id: 88,
+            inbound_event_id: params[0],
+            idempotency_key: params[1],
+            meta_message_id: params[2],
+            sender_phone_masked: params[3],
+            sender_phone_hash: params[4],
+            follow_up_status: 'PENDING',
+            is_new_insert: true
+          }],
+          rowCount: 1
+        };
+      }
+
       return { rows: [], rowCount: 0 };
     },
     release: () => {
@@ -266,17 +283,17 @@ test('1. Successful Flow event processing converts event to enquiry and marks PR
   assert.equal(processedUpdate.params[1], 'worker-test-01', 'Must pass workerId for ownership verification');
 });
 
-test('2. Non-Flow event handling marks event IGNORED without creating enquiries', async () => {
-  const textEvent = {
+test('2. Unsupported event (media / status) marks event IGNORED without creating enquiries', async () => {
+  const mediaEvent = {
     id: '302',
     event_kind: 'message',
-    meta_message_id: 'wamid.TXT01',
-    event_type: 'text',
+    meta_message_id: 'wamid.MEDIA01',
+    event_type: 'image',
     processing_status: 'PENDING',
-    payload: {}
+    payload: { mime_type: 'image/jpeg', has_media_id: true }
   };
 
-  const mockDb = createWorkerMockDb({ initialQueue: [textEvent] });
+  const mockDb = createWorkerMockDb({ initialQueue: [mediaEvent] });
   const worker = createWorker({
     workerId: 'worker-test-01',
     dbPool: mockDb,
@@ -297,7 +314,50 @@ test('2. Non-Flow event handling marks event IGNORED without creating enquiries'
   const ignoredUpdate = mockDb.executedQueries.find(
     q => q.sql.includes('UPDATE whatsapp_inbound_events') && q.sql.includes("SET processing_status = 'IGNORED'")
   );
-  assert.ok(ignoredUpdate, 'Must mark non-Flow event IGNORED');
+  assert.ok(ignoredUpdate, 'Must mark media event IGNORED');
+});
+
+test('2b. Ordinary inbound text message ("Hi") routes to follow-up workflow and marks PROCESSED', async () => {
+  const textEvent = {
+    id: '302b',
+    event_kind: 'message',
+    meta_message_id: 'wamid.TXT01',
+    event_type: 'text',
+    sender_phone_masked: '***3210',
+    sender_phone_hash: 'a1b2c3d4e5f6',
+    processing_status: 'PENDING',
+    payload: {}
+  };
+
+  const mockDb = createWorkerMockDb({ initialQueue: [textEvent] });
+  const worker = createWorker({
+    workerId: 'worker-test-01',
+    dbPool: mockDb,
+    forceEnable: true
+  });
+
+  const outcome = await worker.tick();
+
+  assert.equal(outcome.processed, true);
+  assert.equal(outcome.eventId, '302b');
+  assert.equal(outcome.eventKind, 'follow-up');
+  assert.equal(outcome.result.success, true);
+  assert.equal(outcome.result.followUpId, 88);
+
+  // Assert NO enquiry and NO guest was created
+  assert.equal(mockDb.existingEnquiry, null);
+  const guestInserts = mockDb.executedQueries.filter(q => q.sql.includes('INSERT INTO guests'));
+  assert.equal(guestInserts.length, 0);
+
+  // Assert follow-up row was inserted
+  const followUpInsert = mockDb.executedQueries.find(q => q.sql.includes('INSERT INTO whatsapp_message_follow_ups'));
+  assert.ok(followUpInsert, 'Must insert follow-up record');
+
+  // Assert marked PROCESSED
+  const processedUpdate = mockDb.executedQueries.find(
+    q => q.sql.includes('UPDATE whatsapp_inbound_events') && q.sql.includes("SET processing_status = 'PROCESSED'")
+  );
+  assert.ok(processedUpdate, 'Must mark text event PROCESSED');
 });
 
 test('3. No eligible events in queue returns without action and allows polling delay', async () => {
