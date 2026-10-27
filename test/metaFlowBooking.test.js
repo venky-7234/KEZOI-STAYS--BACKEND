@@ -434,4 +434,527 @@ test('LIVE_QUOTE response provides all declared quote fields and formatted displ
   assert.equal(response.data.total_amount, 23600);
 });
 
+test('PROPERTY_DETAILS formats real property specs, verified amenities, and max_guests_text without raw placeholders', async () => {
+  const db = fakeDb();
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_SELECTION',
+    data: base
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_DETAILS');
+  assert.equal(response.data.property_name, 'Kezoi Villa');
+  assert.equal(response.data.property_specs_text, '3 Bedrooms • 3 Bathrooms • Villa');
+  assert.equal(response.data.max_guests_text, 'Accommodates up to 8 guests');
+  assert.ok(!response.data.max_guests_text.includes('${'), 'max_guests_text must not contain raw placeholder');
+  assert.equal(response.data.amenities_text, 'Wi-Fi • Kitchen');
+  assert.equal(response.data.has_gallery, true);
+  assert.equal(response.data.gallery.length, 1);
+});
+
+test('PROPERTY_DETAILS handles properties without photos gracefully with has_gallery false', async () => {
+  const dbWithoutPhotos = {
+    query: async (sql, params = []) => {
+      if (/FROM properties WHERE id=/.test(sql)) return { rows: [{ ...property, id: 2, property_name: 'Kezoi Penthouse' }] };
+      if (/FROM property_marketing_photos WHERE/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(dbWithoutPhotos, {
+    action: 'data_exchange',
+    screen: 'VIEW_STAY_ENTRY',
+    data: { property_id: '2', entry_intent: 'view_stay' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_DETAILS');
+  assert.equal(response.data.property_name, 'Kezoi Penthouse');
+  assert.equal(response.data.has_gallery, false);
+  assert.deepEqual(response.data.gallery, []);
+});
+
+test('supports property lookup by property_code directly when property_id is not provided', async () => {
+  const db = {
+    query: async (sql, params = []) => {
+      if (/FROM properties WHERE LOWER\(property_code\)=/.test(sql)) {
+        return { rows: [{ ...property, id: 1, property_code: 'TG-0001' }] };
+      }
+      if (/FROM property_marketing_photos WHERE/.test(sql)) {
+        return { rows: [{ id: 9, alt_text: 'Living room', caption: null, meta_image_base64: 'iVBORw0KGgo=', display_order: 0, is_cover: true }] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'VIEW_STAY_ENTRY',
+    data: { property_code: 'TG-0001', entry_intent: 'view_stay' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_DETAILS');
+  assert.equal(response.data.property_id, '1');
+  assert.equal(response.data.property_name, 'Kezoi Villa');
+});
+
+test('rejects special_requests exceeding 600 characters in GUEST_DETAILS and createPendingEnquiry', async () => {
+  const db = fakeDb();
+  const oversizedRequests = 'a'.repeat(601);
+
+  // 1. GUEST_DETAILS check
+  const guestDetailsResponse = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'GUEST_DETAILS',
+    data: {
+      ...base,
+      guest_name: 'Test Guest',
+      guest_email: 'test@example.com',
+      whatsapp_number: '+919876543210',
+      special_requests: oversizedRequests
+    }
+  });
+
+  assert.equal(guestDetailsResponse.screen, 'GUEST_DETAILS');
+  assert.match(guestDetailsResponse.data.error_message, /Special requests cannot exceed 600 characters/);
+
+  // 2. createPendingEnquiry check
+  process.env.JWT_SECRET = 'test-secret';
+  process.env.WEBSITE_APPLICATION_URL = 'https://guest.kezoistays.test/upload';
+  const reviewResponse = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'BOOKING_REVIEW',
+    flow_token: 'token-600',
+    data: {
+      ...base,
+      guest_name: 'Test Guest',
+      guest_email: 'test@example.com',
+      whatsapp_number: '+919876543210',
+      special_requests: oversizedRequests
+    }
+  });
+
+  assert.equal(reviewResponse.screen, 'BOOKING_REVIEW');
+  assert.match(reviewResponse.data.error_message, /Special requests cannot exceed 600 characters/);
+  delete process.env.JWT_SECRET;
+  delete process.env.WEBSITE_APPLICATION_URL;
+});
+
+test('PROPERTY_SELECTION returns multiple active properties from database records', async () => {
+  const prop1 = { ...property, id: 1, property_code: 'TG-0001', property_name: 'Kezoi Villa Manikonda', bedrooms: 3, bathrooms: 3, max_guests: 8, base_price: 10000 };
+  const prop2 = { ...property, id: 2, property_code: 'TG-0002', property_name: 'Kezoi Penthouse Gachibowli', bedrooms: 4, bathrooms: 4, max_guests: 12, base_price: 16000 };
+
+  const multiPropDb = {
+    query: async (sql, params = []) => {
+      if (/FROM properties p/.test(sql)) {
+        return { rows: [prop1, prop2] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(multiPropDb, {
+    action: 'data_exchange',
+    screen: 'BOOKING_DETAILS',
+    data: { check_in: '2026-11-01', check_out: '2026-11-03', adults: 4, children: 0, infants: 0, pets: 0 }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_SELECTION');
+  assert.equal(response.data.properties.length, 2);
+  assert.equal(response.data.properties[0].id, '1');
+  assert.equal(response.data.properties[0].title, 'Kezoi Villa Manikonda');
+  assert.equal(response.data.properties[1].id, '2');
+  assert.equal(response.data.properties[1].title, 'Kezoi Penthouse Gachibowli');
+  assert.equal(response.data.has_available_properties, true);
+  assert.equal(response.data.no_properties_available, false);
+});
+
+test('EXACT DASHBOARD PRICING PARITY: standard stay matches getPropertyAndQuote identically', async () => {
+  const { getPropertyAndQuote } = require('../src/controllers/application.controller');
+  const { selectedQuote } = require('../src/services/metaFlowBooking.service');
+
+  const testProp = {
+    id: 1,
+    property_code: 'TG-0001',
+    property_name: 'Kezoi Villa',
+    base_price: 12000,
+    included_guests: 4,
+    extra_guest_price: 1500,
+    max_guests: 8,
+    currency: 'INR',
+    gst_enabled: true,
+    gst_rate: 18,
+    price_includes_gst: false,
+    status: 'ACTIVE'
+  };
+
+  const parityDb = {
+    query: async (sql, params = []) => {
+      if (/FROM properties p/.test(sql)) return { rows: [{ ...testProp }] };
+      if (/FROM properties WHERE id\s*=/.test(sql)) return { rows: [{ ...testProp }] };
+      if (/FROM bookings/.test(sql) || /FROM property_blocks/.test(sql)) return { rows: [] };
+      if (/FROM mobile_discount_offers/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    }
+  };
+
+  const stayData = {
+    property_id: '1',
+    check_in: '2026-11-01',
+    check_out: '2026-11-04',
+    adults: 3,
+    children: 1,
+    infants: 0,
+    pets: 0
+  };
+
+  // Dashboard API quote
+  const dashboardResult = await getPropertyAndQuote(
+    parityDb,
+    1,
+    {
+      checkIn: stayData.check_in,
+      checkOut: stayData.check_out,
+      nights: 3,
+      pricedGuests: 4,
+      totalOccupants: 4
+    },
+    null
+  );
+
+  // WhatsApp Flow quote
+  const flowResult = await selectedQuote(parityDb, stayData);
+
+  assert.equal(dashboardResult.error, undefined);
+  assert.equal(flowResult.error, undefined);
+
+  const dashQ = dashboardResult.quote;
+  const flowQ = flowResult.property.quote;
+
+  assert.equal(flowQ.nights, dashQ.nights);
+  assert.equal(flowQ.base_price_per_night, dashQ.base_price_per_night);
+  assert.equal(flowQ.included_guests, dashQ.included_guests);
+  assert.equal(flowQ.extra_guests, dashQ.extra_guests);
+  assert.equal(flowQ.extra_guest_price_per_night, dashQ.extra_guest_price_per_night);
+  assert.equal(flowQ.base_amount, dashQ.base_amount);
+  assert.equal(flowQ.extra_guest_amount, dashQ.extra_guest_amount);
+  assert.equal(flowQ.original_amount, dashQ.original_amount);
+  assert.equal(flowQ.discount_percentage, dashQ.discount_percentage);
+  assert.equal(flowQ.discount_amount, dashQ.discount_amount);
+  assert.equal(flowQ.taxable_amount, dashQ.taxable_amount);
+  assert.equal(flowQ.gst_rate, dashQ.gst_rate);
+  assert.equal(flowQ.cgst_amount, dashQ.cgst_amount);
+  assert.equal(flowQ.sgst_amount, dashQ.sgst_amount);
+  assert.equal(flowQ.gst_amount, dashQ.gst_amount);
+  assert.equal(flowQ.total_amount, dashQ.total_amount);
+  assert.equal(flowQ.currency, dashQ.currency);
+});
+
+test('EXACT DASHBOARD PRICING PARITY: extra guests calculation matches identically', async () => {
+  const { getPropertyAndQuote } = require('../src/controllers/application.controller');
+  const { selectedQuote } = require('../src/services/metaFlowBooking.service');
+
+  const testProp = {
+    id: 1,
+    property_code: 'TG-0001',
+    property_name: 'Kezoi Villa',
+    base_price: 10000,
+    included_guests: 4,
+    extra_guest_price: 1200,
+    max_guests: 10,
+    currency: 'INR',
+    gst_enabled: true,
+    gst_rate: 18,
+    price_includes_gst: false,
+    status: 'ACTIVE'
+  };
+
+  const parityDb = {
+    query: async (sql, params = []) => {
+      if (/FROM properties p/.test(sql)) return { rows: [{ ...testProp }] };
+      if (/FROM properties WHERE id\s*=/.test(sql)) return { rows: [{ ...testProp }] };
+      if (/FROM bookings/.test(sql) || /FROM property_blocks/.test(sql)) return { rows: [] };
+      if (/FROM mobile_discount_offers/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    }
+  };
+
+  // 4 nights, 6 adults + 2 children = 8 priced guests (4 extra guests)
+  const stayData = {
+    property_id: '1',
+    check_in: '2026-11-05',
+    check_out: '2026-11-09',
+    adults: 6,
+    children: 2,
+    infants: 1, // infants do not count towards priced occupants
+    pets: 1
+  };
+
+  const dashboardResult = await getPropertyAndQuote(
+    parityDb,
+    1,
+    {
+      checkIn: stayData.check_in,
+      checkOut: stayData.check_out,
+      nights: 4,
+      pricedGuests: 8,
+      totalOccupants: 9
+    },
+    null
+  );
+
+  const flowResult = await selectedQuote(parityDb, stayData);
+
+  assert.equal(dashboardResult.error, undefined);
+  assert.equal(flowResult.error, undefined);
+
+  const dashQ = dashboardResult.quote;
+  const flowQ = flowResult.property.quote;
+
+  assert.equal(flowQ.nights, 4);
+  assert.equal(flowQ.extra_guests, 4);
+  assert.equal(flowQ.base_amount, 40000); // 10000 * 4
+  assert.equal(flowQ.extra_guest_amount, 19200); // 4 extra * 1200 * 4 nights
+  assert.equal(flowQ.original_amount, 59200);
+  assert.equal(flowQ.taxable_amount, 59200);
+  assert.equal(flowQ.gst_amount, 10656); // 18% of 59200
+  assert.equal(flowQ.total_amount, 69856);
+
+  // Exact parity match
+  assert.deepEqual(flowQ, dashQ);
+});
+
+test('EXACT DASHBOARD PRICING PARITY: active mobile discount offer matches identically', async () => {
+  const { getPropertyAndQuote } = require('../src/controllers/application.controller');
+  const { selectedQuote } = require('../src/services/metaFlowBooking.service');
+
+  const testProp = {
+    id: 1,
+    property_code: 'TG-0001',
+    property_name: 'Kezoi Villa',
+    base_price: 15000,
+    included_guests: 6,
+    extra_guest_price: 1500,
+    max_guests: 10,
+    currency: 'INR',
+    gst_enabled: true,
+    gst_rate: 18,
+    price_includes_gst: false,
+    status: 'ACTIVE'
+  };
+
+  const mobileOffer = {
+    id: 99,
+    mobile_number: '+919876543210',
+    discount_percentage: 10.0,
+    reason: 'VIP Returning Guest',
+    status: 'ACTIVE',
+    valid_until: '2026-12-31T23:59:59.000Z'
+  };
+
+  const parityDb = {
+    query: async (sql, params = []) => {
+      if (/FROM properties p/.test(sql)) return { rows: [{ ...testProp }] };
+      if (/FROM properties WHERE id\s*=/.test(sql)) return { rows: [{ ...testProp }] };
+      if (/FROM bookings/.test(sql) || /FROM property_blocks/.test(sql)) return { rows: [] };
+      if (/FROM mobile_discount_offers/.test(sql)) {
+        if (params[0] === '+919876543210') return { rows: [{ ...mobileOffer }] };
+        return { rows: [] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const stayData = {
+    property_id: '1',
+    check_in: '2026-11-10',
+    check_out: '2026-11-12',
+    adults: 4,
+    children: 0,
+    infants: 0,
+    pets: 0,
+    whatsapp_number: '+919876543210',
+    country_code: 'IN'
+  };
+
+  const dashboardResult = await getPropertyAndQuote(
+    parityDb,
+    1,
+    {
+      checkIn: stayData.check_in,
+      checkOut: stayData.check_out,
+      nights: 2,
+      pricedGuests: 4,
+      totalOccupants: 4
+    },
+    '+919876543210'
+  );
+
+  const flowResult = await selectedQuote(parityDb, stayData);
+
+  assert.equal(dashboardResult.error, undefined);
+  assert.equal(flowResult.error, undefined);
+
+  const dashQ = dashboardResult.quote;
+  const flowQ = flowResult.property.quote;
+
+  assert.equal(flowQ.base_amount, 30000); // 15000 * 2
+  assert.equal(flowQ.original_amount, 30000);
+  assert.equal(flowQ.discount_percentage, 10);
+  assert.equal(flowQ.discount_amount, 3000); // 10% of 30000
+  assert.equal(flowQ.taxable_amount, 27000); // 30000 - 3000
+  assert.equal(flowQ.gst_amount, 4860); // 18% of 27000
+  assert.equal(flowQ.cgst_amount, 2430);
+  assert.equal(flowQ.sgst_amount, 2430);
+  assert.equal(flowQ.total_amount, 31860);
+  assert.equal(flowQ.mobile_discount_applied, true);
+  assert.equal(flowQ.mobile_discount_offer_id, 99);
+
+  // Exact parity match
+  assert.deepEqual(flowQ, dashQ);
+});
+
+test('EXACT DASHBOARD PRICING PARITY: GST-inclusive configuration is rejected by both systems', async () => {
+  const { getPropertyAndQuote } = require('../src/controllers/application.controller');
+  const { selectedQuote } = require('../src/services/metaFlowBooking.service');
+
+  const testProp = {
+    id: 1,
+    property_code: 'TG-0001',
+    property_name: 'Kezoi Inclusive',
+    base_price: 10000,
+    included_guests: 4,
+    extra_guest_price: 1000,
+    max_guests: 8,
+    currency: 'INR',
+    gst_enabled: true,
+    gst_rate: 18,
+    price_includes_gst: true, // Unsupported configuration
+    status: 'ACTIVE'
+  };
+
+  const parityDb = {
+    query: async (sql, params = []) => {
+      // In availability.service.js, SQL filters out properties where price_includes_gst IS TRUE
+      if (/FROM properties p/.test(sql)) return { rows: [] };
+      if (/FROM properties WHERE id\s*=/.test(sql)) return { rows: [{ ...testProp }] };
+      return { rows: [] };
+    }
+  };
+
+  const stayData = {
+    property_id: '1',
+    check_in: '2026-11-01',
+    check_out: '2026-11-03',
+    adults: 2,
+    children: 0,
+    infants: 0,
+    pets: 0
+  };
+
+  const dashboardResult = await getPropertyAndQuote(
+    parityDb,
+    1,
+    {
+      checkIn: stayData.check_in,
+      checkOut: stayData.check_out,
+      nights: 2,
+      pricedGuests: 2,
+      totalOccupants: 2
+    },
+    null
+  );
+
+  const flowResult = await selectedQuote(parityDb, stayData);
+
+  assert.equal(dashboardResult.status, 500);
+  assert.match(dashboardResult.error, /GST-inclusive property pricing is not supported/);
+  assert.equal(flowResult.status, 409);
+  assert.match(flowResult.error, /Property is unavailable/);
+});
+
+test('EXACT DASHBOARD PRICING PARITY: createPendingEnquiry persists exact discount and quote fields', async () => {
+  const { createPendingEnquiry, enquiryKey } = require('../src/services/metaFlowBooking.service');
+  process.env.JWT_SECRET = 'test-secret';
+  process.env.WEBSITE_APPLICATION_URL = 'https://guest.kezoistays.test/upload';
+
+  let capturedEnquiryParams = null;
+  const parityDb = {
+    query: async (sql, params = []) => {
+      if (/FROM properties p/.test(sql)) return { rows: [{ ...property, base_price: 20000 }] };
+      if (/FROM properties WHERE id\s*=/.test(sql)) return { rows: [{ ...property, base_price: 20000 }] };
+      if (/FROM mobile_discount_offers/.test(sql)) {
+        return {
+          rows: [{
+            id: 88,
+            mobile_number: '+919876543210',
+            discount_percentage: 20,
+            status: 'ACTIVE'
+          }]
+        };
+      }
+      if (/SELECT \* FROM guests/.test(sql)) return { rows: [{ id: 7 }] };
+      if (/INSERT INTO enquiries/.test(sql)) {
+        capturedEnquiryParams = params;
+        return {
+          rows: [{
+            id: 101,
+            guest_id: 7,
+            status: 'NEW',
+            quoted_total_amount: params[9],
+            discount_percentage: params[21],
+            discount_amount: params[22],
+            mobile_discount_offer_id: params[23],
+            integration_idempotency_key: params[19],
+            integration_request_hash: params[20]
+          }]
+        };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const submission = {
+    property_id: '1',
+    check_in: '2026-11-01',
+    check_out: '2026-11-03', // 2 nights
+    adults: 2,
+    children: 0,
+    infants: 0,
+    pets: 0,
+    guest_name: 'Parity Guest',
+    guest_email: 'guest@example.com',
+    whatsapp_number: '+919876543210',
+    country_code: 'IN',
+    flow_token: 'parity-token-123'
+  };
+
+  const result = await createPendingEnquiry(parityDb, submission);
+  assert.equal(result.replayed, false);
+  assert.ok(capturedEnquiryParams);
+
+  // Gross = 20000 * 2 = 40000
+  // Discount = 20% of 40000 = 8000
+  // Taxable = 32000
+  // GST 18% = 5760
+  // Total = 37760
+  assert.equal(capturedEnquiryParams[9], 37760); // total_amount
+  assert.equal(capturedEnquiryParams[10], 40000); // base_amount
+  assert.equal(capturedEnquiryParams[12], 40000); // original_amount
+  assert.equal(capturedEnquiryParams[13], 32000); // taxable_amount
+  assert.equal(capturedEnquiryParams[14], 18); // gst_rate
+  assert.equal(capturedEnquiryParams[17], 5760); // gst_amount
+  assert.equal(capturedEnquiryParams[19], enquiryKey(submission)); // key at idx 19
+  assert.equal(capturedEnquiryParams[21], 20); // discount_percentage
+  assert.equal(capturedEnquiryParams[22], 8000); // discount_amount
+  assert.equal(capturedEnquiryParams[23], 88); // mobile_discount_offer_id
+
+  delete process.env.JWT_SECRET;
+  delete process.env.WEBSITE_APPLICATION_URL;
+});
+
+
 

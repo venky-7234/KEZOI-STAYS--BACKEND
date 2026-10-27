@@ -29,11 +29,11 @@
         "type": "SingleColumnLayout",
         "children": [
           { "type": "TextHeading", "text": "Kezoi Stays" },
-          { "type": "TextBody", "text": "Load current property photographs, details and amenities." },
+          { "type": "TextBody", "text": "Discover our handpicked luxury villas and apartments in Hyderabad. Browse verified photographs, curated amenities, and premium spaces designed for comfort." },
           { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
-            "label": "View property",
+            "label": "Explore property details",
             "on-click-action": {
               "name": "data_exchange",
               "payload": {
@@ -59,8 +59,8 @@
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
-          { "type": "TextHeading", "text": "Reserve Kezoi Stays" },
-          { "type": "TextBody", "text": "Continue to the live availability calendar for the selected property." },
+          { "type": "TextHeading", "text": "Check Availability & Rates" },
+          { "type": "TextBody", "text": "Select your desired stay dates and party size to check live availability and receive an instant transparent quotation. Every enquiry is verified before confirmation." },
           { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
@@ -166,6 +166,7 @@
           ]
         },
         "no_properties_available": { "type": "boolean", "__example__": false },
+        "has_available_properties": { "type": "boolean", "__example__": true },
         "search_summary_text": { "type": "string", "__example__": "Live results for 2026-11-01 to 2026-11-03." },
         "has_error": { "type": "boolean", "__example__": false },
         "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
@@ -180,12 +181,13 @@
             "children": [
               { "type": "TextHeading", "text": "Choose a property" },
               { "type": "TextBody", "text": "${data.search_summary_text}" },
-              { "type": "TextBody", "text": "No property is available for those dates and guests.", "visible": "${data.no_properties_available}" },
+              { "type": "TextBody", "text": "No properties are available for the selected dates and guest count. Please select different dates.", "visible": "${data.no_properties_available}" },
               { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
-              { "type": "RadioButtonsGroup", "name": "property_id", "label": "Properties", "data-source": "${data.properties}", "required": true },
+              { "type": "RadioButtonsGroup", "name": "property_id", "label": "Properties", "data-source": "${data.properties}", "required": true, "visible": "${data.has_available_properties}" },
               {
                 "type": "Footer",
                 "label": "View stay",
+                "visible": "${data.has_available_properties}",
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": {
@@ -210,11 +212,13 @@
       "data": {
         "property_id": { "type": "string", "__example__": "1" },
         "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" },
+        "property_specs_text": { "type": "string", "__example__": "3 Bedrooms • 3 Bathrooms • Villa" },
         "property_description": { "type": "string", "__example__": "A premium Kezoi stay." },
         "property_location": { "type": "string", "__example__": "Manikonda, Hyderabad" },
         "amenities": { "type": "array", "items": { "type": "string" }, "__example__": ["Wi-Fi", "Kitchen"] },
         "amenities_text": { "type": "string", "__example__": "Wi-Fi • Kitchen" },
         "max_guests": { "type": "number", "__example__": 10 },
+        "max_guests_text": { "type": "string", "__example__": "Accommodates up to 8 guests" },
         "gallery": {
           "type": "array",
           "items": {
@@ -226,6 +230,7 @@
           },
           "__example__": [{ "src": "iVBORw0KGgo=", "alt-text": "Living room" }]
         },
+        "has_gallery": { "type": "boolean", "__example__": true },
         "check_in": { "type": "string", "__example__": "2026-11-01" },
         "check_out": { "type": "string", "__example__": "2026-11-03" },
         "adults": { "type": "number", "__example__": 2 },
@@ -238,14 +243,15 @@
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
-          { "type": "ImageCarousel", "images": "${data.gallery}", "aspect-ratio": "4:3", "scale-type": "cover" },
+          { "type": "ImageCarousel", "images": "${data.gallery}", "aspect-ratio": "4:3", "scale-type": "cover", "visible": "${data.has_gallery}" },
           { "type": "TextHeading", "text": "${data.property_name}" },
+          { "type": "TextSubheading", "text": "${data.property_specs_text}" },
           { "type": "TextBody", "text": "${data.property_description}" },
           { "type": "TextSubheading", "text": "Location" },
           { "type": "TextBody", "text": "${data.property_location}" },
           { "type": "TextSubheading", "text": "Amenities & facilities" },
           { "type": "TextBody", "text": "${data.amenities_text}" },
-          { "type": "TextCaption", "text": "Up to ${data.max_guests} guests" },
+          { "type": "TextCaption", "text": "${data.max_guests_text}" },
           { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
@@ -289,7 +295,7 @@
             "type": "Form",
             "name": "calendar_form",
             "children": [
-              { "type": "TextBody", "text": "Unavailable nights are disabled from live booking data." },
+              { "type": "TextBody", "text": "Select check-in and check-out dates. Live availability is verified against our reservation calendar." },
               { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               {
                 "type": "CalendarPicker",
@@ -476,7 +482,7 @@
               { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               { "type": "TextInput", "name": "guest_name", "label": "Full name", "input-type": "text", "required": true },
               { "type": "TextInput", "name": "guest_email", "label": "Email", "input-type": "email", "required": true },
-              { "type": "TextInput", "name": "whatsapp_number", "label": "WhatsApp number with country code", "input-type": "phone", "required": true, "helper-text": "e.g. +91 98765 43210" },
+              { "type": "TextInput", "name": "whatsapp_number", "label": "WhatsApp number", "input-type": "phone", "required": true, "helper-text": "Include country code e.g. +91 98765 43210" },
               { "type": "TextInput", "name": "country_code", "label": "Country code", "input-type": "text", "required": false, "helper-text": "2-letter ISO country code (default: IN)" },
               { "type": "TextArea", "name": "special_requests", "label": "Special requests", "required": false },
               {

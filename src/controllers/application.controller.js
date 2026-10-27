@@ -14,7 +14,7 @@ const {
 } = require('../services/contactValidation.service');
 const { validatePhoneNumber, INVALID_MOBILE_MESSAGE } = require('../utils/phoneValidator');
 const { notifyApplicationSubmitted } = require('../services/applicationNotification.service');
-const { calculateExclusiveGst } = require('../utils/gstCalculator');
+const { calculateExclusiveGst, calculateAuthoritativeQuote } = require('../utils/gstCalculator');
 
 const DOCUMENT_TYPES = ['AADHAAR_CARD', 'PASSPORT', 'DRIVING_LICENCE'];
 const DOCUMENT_TYPE_ALIASES = {
@@ -88,7 +88,8 @@ const getPropertyAndQuote = async (db, propertyId, stay, mobileNumber = null) =>
 
   const property = propertyResult.rows[0];
   if (property.status !== 'ACTIVE') return { status: 409, error: 'Property is not active' };
-  if (property.max_guests && stay.totalOccupants > Number(property.max_guests)) {
+  const totalOccupants = stay.totalOccupants ?? stay.total_occupants ?? (stay.adults + stay.children + stay.infants);
+  if (property.max_guests && totalOccupants > Number(property.max_guests)) {
     return { status: 400, error: `This property allows a maximum of ${property.max_guests} guests` };
   }
 
@@ -107,61 +108,24 @@ const getPropertyAndQuote = async (db, propertyId, stay, mobileNumber = null) =>
     return { status: 409, error: 'Property is unavailable for one or more selected dates' };
   }
 
-  const basePrice = Number(property.base_price || 0);
-  const includedGuests = Number(property.included_guests || 6);
-  const extraGuestPrice = Number(property.extra_guest_price || 0);
-  const extraGuests = Math.max(0, stay.pricedGuests - includedGuests);
-  const baseAmount = basePrice * stay.nights;
-  const extraGuestAmount = extraGuests * extraGuestPrice * stay.nights;
-  const originalAmount = baseAmount + extraGuestAmount;
-  const offer = await getActiveMobileDiscount(db, mobileNumber);
-  const discountPercentage = Number(offer?.discount_percentage || 0);
-  const discountAmount = Number(((originalAmount * discountPercentage) / 100).toFixed(2));
   if (property.price_includes_gst) {
     return { status: 500, error: 'GST-inclusive property pricing is not supported by this pricing configuration' };
   }
-  const tax = calculateExclusiveGst({
-    baseAmount,
-    extraGuestAmount,
-    discountAmount,
-    gstRate: property.gst_rate ?? process.env.DEFAULT_GST_RATE ?? 18,
-    gstEnabled: property.gst_enabled !== false
+
+  const offer = await getActiveMobileDiscount(db, mobileNumber);
+  const quote = calculateAuthoritativeQuote({
+    property,
+    stay: {
+      ...stay,
+      nights: stay.nights,
+      priced_guests: stay.pricedGuests ?? stay.priced_guests
+    },
+    discountOffer: offer
   });
-  const currency = property.currency || process.env.DEFAULT_CURRENCY || 'INR';
 
   return {
     property,
-    quote: {
-      nights: stay.nights,
-      base_price_per_night: basePrice,
-      included_guests: includedGuests,
-      extra_guests: extraGuests,
-      extra_guest_price_per_night: extraGuestPrice,
-      base_amount: baseAmount,
-      extra_guest_amount: extraGuestAmount,
-      original_amount: originalAmount,
-      actual_price: originalAmount,
-      discount_percentage: discountPercentage,
-      discount_amount: discountAmount,
-      discount_for_you: discountAmount,
-      taxable_amount: tax.taxable_amount,
-      gst_rate: tax.gst_rate,
-      cgst_rate: tax.cgst_rate,
-      cgst_amount: tax.cgst_amount,
-      sgst_rate: tax.sgst_rate,
-      sgst_amount: tax.sgst_amount,
-      igst_rate: tax.igst_rate,
-      igst_amount: tax.igst_amount,
-      gst_amount: tax.gst_amount,
-      currency,
-      price_includes_gst: false,
-      final_amount: tax.total_amount,
-      total_amount: tax.total_amount,
-      mobile_discount_applied: Boolean(offer),
-      mobile_discount_offer_id: offer?.id || null,
-      discount_reason: offer?.reason || null,
-      discount_valid_until: offer?.valid_until || null
-    }
+    quote
   };
 };
 
@@ -475,5 +439,8 @@ module.exports = {
   requestVerification,
   confirmVerification,
   submitApplication,
-  uploadEnquiryIdentityDocument
+  uploadEnquiryIdentityDocument,
+  getPropertyAndQuote,
+  getActiveMobileDiscount,
+  validateStay
 };

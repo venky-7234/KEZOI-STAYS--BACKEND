@@ -1,4 +1,5 @@
-const { calculateExclusiveGst } = require('../utils/gstCalculator');
+const { calculateAuthoritativeQuote, calculateExclusiveGst } = require('../utils/gstCalculator');
+const { validatePhoneNumber } = require('../utils/phoneValidator');
 
 const ACTIVE_BOOKING_STATUSES = ['HOLD', 'CONFIRMED', 'CHECKED_IN'];
 
@@ -30,9 +31,32 @@ const parseStay = input => {
   };
 };
 
+const getActiveMobileDiscount = async (db, mobileNumber) => {
+  if (!mobileNumber) return null;
+  const result = await db.query(
+    `SELECT id, discount_percentage, reason, valid_until
+       FROM mobile_discount_offers
+      WHERE mobile_number = $1 AND status = 'ACTIVE'
+        AND valid_from <= CURRENT_TIMESTAMP
+        AND (valid_until IS NULL OR valid_until > CURRENT_TIMESTAMP)
+      LIMIT 1`,
+    [mobileNumber]
+  );
+  return result.rows[0] || null;
+};
+
 const findAvailableProperties = async (db, input) => {
   const stay = parseStay(input);
   if (stay.error) return { error: stay.error, status: 400 };
+
+  let mobileDiscount = null;
+  const rawMobile = input.mobile_number || input.whatsapp_number || input.phone;
+  if (rawMobile) {
+    const mobile = validatePhoneNumber(rawMobile, input.country_code || input.phone_country_code || 'IN');
+    if (mobile.valid) {
+      mobileDiscount = await getActiveMobileDiscount(db, mobile.normalizedNumber);
+    }
+  }
 
   const result = await db.query(
     `SELECT p.id, p.property_code, p.property_name, p.property_type, p.area, p.city,
@@ -41,6 +65,7 @@ const findAvailableProperties = async (db, input) => {
             p.airbnb_url
        FROM properties p
       WHERE p.status = 'ACTIVE'
+        AND (p.price_includes_gst IS FALSE OR p.price_includes_gst IS NULL)
         AND (p.max_guests IS NULL OR p.max_guests >= $3)
         AND NOT EXISTS (
           SELECT 1 FROM bookings b
@@ -57,46 +82,22 @@ const findAvailableProperties = async (db, input) => {
     [stay.check_in, stay.check_out, stay.total_occupants, ACTIVE_BOOKING_STATUSES]
   );
 
-  const properties = result.rows.map(property => {
-    const baseAmount = Number(property.base_price || 0) * stay.nights;
-    const extraGuests = Math.max(0, stay.priced_guests - Number(property.included_guests || 6));
-    const extraGuestAmount = extraGuests * Number(property.extra_guest_price || 0) * stay.nights;
-    const tax = calculateExclusiveGst({
-      baseAmount,
-      extraGuestAmount,
-      gstRate: property.gst_rate ?? 18,
-      gstEnabled: property.gst_enabled !== false
-    });
-    return {
-      ...property,
-      available: true,
-      quote: {
-        nights: stay.nights,
-        base_price_per_night: Number(property.base_price || 0),
-        included_guests: Number(property.included_guests || 6),
-        base_amount: baseAmount,
-        extra_guests: extraGuests,
-        extra_guest_price_per_night: Number(property.extra_guest_price || 0),
-        extra_guest_amount: extraGuestAmount,
-        original_amount: baseAmount + extraGuestAmount,
-        discount_percentage: 0,
-        discount_amount: 0,
-        taxable_amount: tax.taxable_amount,
-        gst_rate: tax.gst_rate,
-        cgst_rate: tax.cgst_rate,
-        cgst_amount: tax.cgst_amount,
-        sgst_rate: tax.sgst_rate,
-        sgst_amount: tax.sgst_amount,
-        igst_rate: tax.igst_rate,
-        igst_amount: tax.igst_amount,
-        gst_amount: tax.gst_amount,
-        total_amount: tax.total_amount,
-        currency: property.currency || 'INR',
-        price_includes_gst: false
-      }
-    };
-  });
+  const properties = result.rows.map(property => ({
+    ...property,
+    available: true,
+    quote: calculateAuthoritativeQuote({
+      property,
+      stay,
+      discountOffer: mobileDiscount
+    })
+  }));
   return { stay, properties };
 };
 
-module.exports = { ACTIVE_BOOKING_STATUSES, parseStay, findAvailableProperties };
+module.exports = {
+  ACTIVE_BOOKING_STATUSES,
+  parseStay,
+  findAvailableProperties,
+  getActiveMobileDiscount,
+  calculateAuthoritativeQuote
+};

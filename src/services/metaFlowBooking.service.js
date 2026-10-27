@@ -24,8 +24,8 @@ const SCREEN_DATA_FIELDS = Object.freeze({
   [SCREENS.VIEW_ENTRY]: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
   [SCREENS.RESERVE_ENTRY]: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
   [SCREENS.START]: ['has_error', 'error_message'],
-  [SCREENS.PROPERTIES]: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'search_summary_text', 'quote_generated_at', 'has_error', 'error_message'],
-  [SCREENS.DETAILS]: ['property_id', 'property_name', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  [SCREENS.PROPERTIES]: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'has_available_properties', 'search_summary_text', 'quote_generated_at', 'has_error', 'error_message'],
+  [SCREENS.DETAILS]: ['property_id', 'property_name', 'property_specs_text', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'max_guests_text', 'gallery', 'has_gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
   [SCREENS.CALENDAR]: ['property_id', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'unavailable_dates', 'calendar_refreshed_at', 'has_error', 'error_message'],
   [SCREENS.GUESTS]: ['property_id', 'check_in', 'check_out', 'max_guests', 'max_guests_text', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
   [SCREENS.QUOTE]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'stay_dates_text', 'price_breakdown_text', 'total_amount_text', 'quote_caption_text', 'quote_generated_at', 'has_error', 'error_message'],
@@ -66,20 +66,78 @@ const counts = data => ({
 });
 const stayInput = data => {
   const normalized = normalizeStayData(data);
-  return { check_in: normalized.check_in, check_out: normalized.check_out, ...counts(normalized) };
+  return {
+    check_in: normalized.check_in,
+    check_out: normalized.check_out,
+    ...counts(normalized),
+    whatsapp_number: normalized.whatsapp_number,
+    phone: normalized.phone,
+    mobile_number: normalized.mobile_number,
+    country_code: normalized.country_code
+  };
+};
+
+const formatPropertySpecs = property => {
+  const parts = [];
+  if (property.bedrooms) parts.push(`${property.bedrooms} ${property.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`);
+  if (property.bathrooms) parts.push(`${property.bathrooms} ${property.bathrooms === 1 ? 'Bathroom' : 'Bathrooms'}`);
+  if (property.property_type) parts.push(property.property_type.charAt(0).toUpperCase() + property.property_type.slice(1).toLowerCase());
+  return parts.length ? parts.join(' • ') : 'Verified residence';
+};
+
+const formatPropertyDetailsData = (property, data = {}) => {
+  const amenities = Array.isArray(property.public_amenities) ? property.public_amenities : [];
+  const amenitiesText = amenities.length ? amenities.join(' • ') : 'Verified amenities available upon request';
+  const photos = property.photos || [];
+  const gallery = photos.map(photo => ({
+    src: photo.meta_image_base64,
+    'alt-text': photo.alt_text || photo.caption || property.property_name
+  }));
+  const maxGuests = Number(property.max_guests || 0);
+  const maxGuestsText = maxGuests > 0 ? `Accommodates up to ${maxGuests} guests` : 'Capacity confirmed upon booking';
+  const desc = String(property.public_description || '').trim() ||
+    `${property.property_name} is a luxury ${property.bedrooms || ''} bedroom ${property.property_type || 'residence'} situated in ${property.area || property.city || 'Hyderabad'}.`;
+  const location = String(property.public_location || '').trim() ||
+    [property.area, property.city].filter(Boolean).join(', ') || 'Hyderabad, India';
+
+  return {
+    ...data,
+    property_id: String(property.id),
+    property_name: property.property_name,
+    property_specs_text: formatPropertySpecs(property),
+    property_description: desc,
+    property_location: location,
+    amenities,
+    amenities_text: amenitiesText,
+    max_guests: maxGuests,
+    max_guests_text: maxGuestsText,
+    gallery,
+    has_gallery: gallery.length > 0
+  };
 };
 
 const propertyDetails = async (db, propertyId, propertyCode) => {
-  if (!propertyId || isNaN(Number(propertyId))) return null;
-  const result = await db.query(`SELECT id, property_code, property_name, property_type, area, city,
-    bedrooms, bathrooms, max_guests, public_description, public_location, public_amenities
-    FROM properties WHERE id=$1 AND status='ACTIVE'`, [propertyId]);
-  if (!result.rows.length) return null;
-  if (propertyCode && String(result.rows[0].property_code) !== String(propertyCode)) return null;
+  let result;
+  if (propertyId && !isNaN(Number(propertyId))) {
+    result = await db.query(`SELECT id, property_code, property_name, property_type, area, city,
+      bedrooms, bathrooms, max_guests, public_description, public_location, public_amenities
+      FROM properties WHERE id=$1 AND status='ACTIVE'`, [propertyId]);
+    if (result.rows.length && propertyCode && String(result.rows[0].property_code).toLowerCase() !== String(propertyCode).toLowerCase()) {
+      return null;
+    }
+  } else if (propertyCode && typeof propertyCode === 'string' && propertyCode.trim()) {
+    result = await db.query(`SELECT id, property_code, property_name, property_type, area, city,
+      bedrooms, bathrooms, max_guests, public_description, public_location, public_amenities
+      FROM properties WHERE LOWER(property_code)=LOWER($1) AND status='ACTIVE'`, [propertyCode.trim()]);
+  } else {
+    return null;
+  }
+  if (!result || !result.rows.length) return null;
+  const prop = result.rows[0];
   const photos = await db.query(`SELECT id, alt_text, caption, meta_image_base64, display_order, is_cover
     FROM property_marketing_photos WHERE property_id=$1 AND is_active=TRUE
-    ORDER BY is_cover DESC, display_order, id LIMIT 3`, [propertyId]);
-  return { ...result.rows[0], photos: photos.rows };
+    ORDER BY is_cover DESC, display_order, id LIMIT 3`, [prop.id]);
+  return { ...prop, photos: photos.rows };
 };
 
 const unavailableDates = async (db, propertyId) => {
@@ -143,6 +201,9 @@ const createPendingEnquiry = async (db, data) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { status: 400, error: 'A valid email is required' };
   const phone = validatePhoneNumber(data.whatsapp_number, data.country_code || 'IN');
   if (!phone.valid) return { status: 400, error: INVALID_MOBILE_MESSAGE };
+  if (data.special_requests && String(data.special_requests).length > 600) {
+    return { status: 400, error: 'Special requests cannot exceed 600 characters' };
+  }
   const key = enquiryKey(data);
   if (!key) return { status: 400, error: 'A Flow submission token is required' };
   const continuationError = validateContinuationConfiguration();
@@ -164,11 +225,13 @@ const createPendingEnquiry = async (db, data) => {
       VALUES($1,$2,$3,$3,CASE WHEN $3 LIKE '+91%' THEN 'India' ELSE 'International' END,'WHATSAPP',NOW(),NOW(),'ACTIVE') RETURNING *`, [String(data.guest_name).trim(), email, phone.normalizedNumber])).rows[0];
     const q = priced.property.quote; const stay = priced.stay;
     const enquiry = (await db.query(`INSERT INTO enquiries(guest_id,property_id,source,check_in,check_out,adults,children,infants,pets,guest_message,
-      quoted_amount,quoted_base_amount,extra_guest_amount,quoted_total_amount,status,document_verification_status,original_amount,discount_percentage,
-      discount_amount,taxable_amount,gst_rate,cgst_amount,sgst_amount,igst_amount,gst_amount,currency,price_includes_gst,integration_idempotency_key,integration_request_hash)
-      VALUES($1,$2,'WHATSAPP',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$10,'NEW','PENDING',$13,0,0,$14,$15,$16,$17,0,$18,$19,FALSE,$20,$21) RETURNING *`,
+      quoted_amount,quoted_base_amount,extra_guest_amount,quoted_total_amount,status,document_verification_status,original_amount,taxable_amount,
+      gst_rate,cgst_amount,sgst_amount,igst_amount,gst_amount,currency,price_includes_gst,integration_idempotency_key,integration_request_hash,
+      discount_percentage,discount_amount,mobile_discount_offer_id)
+      VALUES($1,$2,'WHATSAPP',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$10,'NEW','PENDING',$13,$14,$15,$16,$17,0,$18,$19,FALSE,$20,$21,$22,$23,$24) RETURNING *`,
       [guest.id, priced.property.id, stay.check_in, stay.check_out, stay.adults, stay.children, stay.infants, stay.pets, data.special_requests || null,
-       q.total_amount, q.base_amount, q.extra_guest_amount, q.original_amount, q.taxable_amount, q.gst_rate, q.cgst_amount, q.sgst_amount, q.gst_amount, q.currency, key, hash])).rows[0];
+       q.total_amount, q.base_amount, q.extra_guest_amount, q.original_amount, q.taxable_amount, q.gst_rate, q.cgst_amount, q.sgst_amount, q.gst_amount, q.currency, key, hash,
+       q.discount_percentage || 0, q.discount_amount || 0, q.mobile_discount_offer_id || null])).rows[0];
     await db.query('COMMIT');
     return { enquiry, replayed: false };
   } catch (error) { await db.query('ROLLBACK'); return { status: error.status || 500, error: error.message || 'Unable to create enquiry' }; }
@@ -194,8 +257,7 @@ const handleFlowAction = async (db, payload) => {
   if (payload.screen === SCREENS.VIEW_ENTRY) {
     const property = await propertyDetails(db, data.property_id, data.property_code);
     if (!property) return errorResponse(SCREENS.VIEW_ENTRY, 'Property not found or inactive', data);
-    const amenities = property.public_amenities || [];
-    return screenResponse(SCREENS.DETAILS, { ...data, property_id: String(property.id), property_name: property.property_name, property_description: property.public_description || '', property_location: property.public_location || [property.area, property.city].filter(Boolean).join(', '), amenities, amenities_text: amenities.join(' • '), max_guests: Number(property.max_guests || 0), gallery: property.photos.map(photo => ({ src: photo.meta_image_base64, 'alt-text': photo.alt_text })) });
+    return screenResponse(SCREENS.DETAILS, formatPropertyDetailsData(property, data));
   }
   if (payload.screen === SCREENS.RESERVE_ENTRY) {
     const property = await propertyDetails(db, data.property_id, data.property_code);
@@ -204,8 +266,20 @@ const handleFlowAction = async (db, payload) => {
   }
   if (payload.screen === SCREENS.START) {
     const guests = data.adults;
-    const result = await findAvailableProperties(db, { check_in: data.check_in, check_out: data.check_out, adults: guests, children: data.children, infants: data.infants, pets: data.pets });
+    const result = await findAvailableProperties(db, {
+      check_in: data.check_in,
+      check_out: data.check_out,
+      adults: guests,
+      children: data.children,
+      infants: data.infants,
+      pets: data.pets,
+      whatsapp_number: data.whatsapp_number,
+      phone: data.phone,
+      mobile_number: data.mobile_number,
+      country_code: data.country_code
+    });
     if (result.error) return errorResponse(SCREENS.START, result.error, data);
+    const hasAvailable = result.properties.length > 0;
     return screenResponse(SCREENS.PROPERTIES, {
       ...data,
       check_in: result.stay.check_in,
@@ -214,17 +288,21 @@ const handleFlowAction = async (db, payload) => {
       children: data.children,
       infants: data.infants,
       pets: data.pets,
-      search_summary_text: `Live results for ${result.stay.check_in} to ${result.stay.check_out}.`,
-      properties: result.properties.map(p => ({ id: String(p.id), title: p.property_name, description: `${p.bedrooms || 0} bedrooms | ${p.bathrooms || 0} bathrooms | ${p.quote.currency} ${p.quote.total_amount}` })),
-      no_properties_available: !result.properties.length,
+      search_summary_text: `Live results for ${result.stay.check_in} to ${result.stay.check_out} (${result.stay.nights} night${result.stay.nights === 1 ? '' : 's'}).`,
+      properties: result.properties.map(p => ({
+        id: String(p.id),
+        title: p.property_name,
+        description: `${p.bedrooms || 0} bedrooms | ${p.bathrooms || 0} bathrooms | ${p.quote.currency} ${money(p.quote.total_amount)}`
+      })),
+      no_properties_available: !hasAvailable,
+      has_available_properties: hasAvailable,
       quote_generated_at: new Date().toISOString()
     });
   }
   if (payload.screen === SCREENS.PROPERTIES) {
     const property = await propertyDetails(db, data.property_id, data.property_code);
     if (!property) return errorResponse(SCREENS.PROPERTIES, 'Property not found or inactive', data);
-    const amenities = property.public_amenities || [];
-    return screenResponse(SCREENS.DETAILS, { ...data, property_id: String(property.id), property_name: property.property_name, property_description: property.public_description || '', property_location: property.public_location || [property.area, property.city].filter(Boolean).join(', '), amenities, amenities_text: amenities.join(' • '), max_guests: Number(property.max_guests || 0), gallery: property.photos.map(photo => ({ src: photo.meta_image_base64, 'alt-text': photo.alt_text })) });
+    return screenResponse(SCREENS.DETAILS, formatPropertyDetailsData(property, data));
   }
   if (payload.screen === SCREENS.DETAILS) return screenResponse(SCREENS.CALENDAR, { ...data, unavailable_dates: await unavailableDates(db, data.property_id), calendar_refreshed_at: new Date().toISOString() });
   if (payload.screen === SCREENS.CALENDAR) {
@@ -236,10 +314,17 @@ const handleFlowAction = async (db, payload) => {
     const property = await propertyDetails(db, data.property_id, data.property_code);
     if (!property) return errorResponse(SCREENS.CALENDAR, 'Property not found or inactive', { ...data, unavailable_dates: blocked });
     const maxGuestsNum = Number(property?.max_guests || 0);
-    return screenResponse(SCREENS.GUESTS, { ...data, check_in: parsed.check_in, check_out: parsed.check_out, max_guests: maxGuestsNum, max_guests_text: `This property accommodates up to ${maxGuestsNum} guests.` });
+    const maxGuestsText = maxGuestsNum > 0 ? `This property accommodates up to ${maxGuestsNum} guests.` : 'Guest capacity confirmed upon booking.';
+    return screenResponse(SCREENS.GUESTS, { ...data, check_in: parsed.check_in, check_out: parsed.check_out, max_guests: maxGuestsNum, max_guests_text: maxGuestsText });
   }
   if (payload.screen === SCREENS.GUESTS) {
-    const priced = await selectedQuote(db, data); if (priced.error) return errorResponse(SCREENS.GUESTS, priced.error, data);
+    const priced = await selectedQuote(db, data);
+    if (priced.error) {
+      const prop = await propertyDetails(db, data.property_id, data.property_code);
+      const maxGuestsNum = Number(prop?.max_guests || data.max_guests || 0);
+      const maxGuestsText = maxGuestsNum > 0 ? `This property accommodates up to ${maxGuestsNum} guests.` : 'Guest capacity confirmed upon booking.';
+      return errorResponse(SCREENS.GUESTS, priced.error, { ...data, max_guests: maxGuestsNum, max_guests_text: maxGuestsText });
+    }
     const q = priced.property.quote;
     const nights = q.nights;
     const currency = q.currency;
@@ -253,7 +338,8 @@ const handleFlowAction = async (db, payload) => {
     const totalAmount = money(q.total_amount);
     const nowIso = new Date().toISOString();
     const stayDatesText = `Dates: ${priced.stay.check_in} to ${priced.stay.check_out} • ${nights} nights`;
-    const priceBreakdownText = `Stay (${nights} nights): ${currency} ${baseAmount}\nExtra guest charges: ${currency} ${extraGuestAmount}\nTaxable amount: ${currency} ${taxableAmount}\nGST (${gstRate}%): ${currency} ${gstAmount}\n  • CGST: ${currency} ${cgstAmount}\n  • SGST: ${currency} ${sgstAmount}`;
+    const discountLine = q.discount_amount > 0 ? `\nDiscount (${q.discount_percentage}%): -${currency} ${money(q.discount_amount)}` : '';
+    const priceBreakdownText = `Stay (${nights} nights): ${currency} ${baseAmount}\nExtra guest charges: ${currency} ${extraGuestAmount}${discountLine}\nTaxable amount: ${currency} ${taxableAmount}\nGST (${gstRate}%): ${currency} ${gstAmount}\n  • CGST: ${currency} ${cgstAmount}\n  • SGST: ${currency} ${sgstAmount}`;
     const totalAmountText = `Total: ${currency} ${totalAmount}`;
     const quoteCaptionText = `Live quote calculated on ${nowIso}. Availability and prices are verified again before enquiry creation.`;
     return screenResponse(SCREENS.QUOTE, {
@@ -286,13 +372,15 @@ const handleFlowAction = async (db, payload) => {
     const phone = validatePhoneNumber(data.whatsapp_number, data.country_code || 'IN');
     if (!String(data.guest_name || '').trim()) return errorResponse(SCREENS.GUEST_DETAILS, 'Guest name is required', data);
     if (!phone.valid || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(data.guest_email || '').trim())) return errorResponse(SCREENS.GUEST_DETAILS, 'Enter a valid email address and WhatsApp number', data);
+    if (data.special_requests && String(data.special_requests).length > 600) return errorResponse(SCREENS.GUEST_DETAILS, 'Special requests cannot exceed 600 characters', data);
     const hasSpecialRequests = Boolean(String(data.special_requests || '').trim());
     const q = priced.property.quote;
     const nowIso = new Date().toISOString();
     const stayDetailsText = `Dates: ${priced.stay.check_in} to ${priced.stay.check_out}\nAdults: ${data.adults} • Children: ${data.children || 0} • Infants: ${data.infants || 0} • Pets: ${data.pets || 0}`;
     const guestContactText = `Name: ${String(data.guest_name).trim()}\nEmail: ${String(data.guest_email).trim()}\nWhatsApp: ${phone.normalizedNumber}\nCountry code: ${data.country_code || 'IN'}`;
     const specialRequestsText = `Special requests: ${String(data.special_requests || '').trim()}`;
-    const quoteSummaryText = `Stay (${q.nights} nights): ${q.currency} ${money(q.base_amount)}\nExtra guests: ${q.currency} ${money(q.extra_guest_amount)}\nTaxable amount: ${q.currency} ${money(q.taxable_amount)}\nGST (${q.gst_rate}%): ${q.currency} ${money(q.gst_amount)} (CGST: ${q.currency} ${money(q.cgst_amount)} + SGST: ${q.currency} ${money(q.sgst_amount)})`;
+    const discountLine = q.discount_amount > 0 ? `\nDiscount (${q.discount_percentage}%): -${q.currency} ${money(q.discount_amount)}` : '';
+    const quoteSummaryText = `Stay (${q.nights} nights): ${q.currency} ${money(q.base_amount)}\nExtra guests: ${q.currency} ${money(q.extra_guest_amount)}${discountLine}\nTaxable amount: ${q.currency} ${money(q.taxable_amount)}\nGST (${q.gst_rate}%): ${q.currency} ${money(q.gst_amount)} (CGST: ${q.currency} ${money(q.cgst_amount)} + SGST: ${q.currency} ${money(q.sgst_amount)})`;
     const totalAmountText = `Total: ${q.currency} ${money(q.total_amount)}`;
     return screenResponse(SCREENS.REVIEW, {
       ...data,
