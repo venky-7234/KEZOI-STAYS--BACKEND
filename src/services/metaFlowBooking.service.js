@@ -16,26 +16,33 @@ const errorResponse = (screen, message, extraData = {}) => ({
   screen,
   data: {
     ...screenResponse(screen, extraData).data,
+    has_error: true,
     error_message: message
   }
 });
 const SCREEN_DATA_FIELDS = Object.freeze({
-  [SCREENS.VIEW_ENTRY]: ['property_id', 'property_code', 'entry_intent', 'error_message'],
-  [SCREENS.RESERVE_ENTRY]: ['property_id', 'property_code', 'entry_intent', 'error_message'],
-  [SCREENS.START]: ['error_message'],
-  [SCREENS.PROPERTIES]: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'quote_generated_at', 'error_message'],
-  [SCREENS.DETAILS]: ['property_id', 'property_name', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'error_message'],
-  [SCREENS.CALENDAR]: ['property_id', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'unavailable_dates', 'calendar_refreshed_at', 'error_message'],
-  [SCREENS.GUESTS]: ['property_id', 'check_in', 'check_out', 'max_guests', 'adults', 'children', 'infants', 'pets', 'error_message'],
-  [SCREENS.QUOTE]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'quote_generated_at'],
-  [SCREENS.GUEST_DETAILS]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'error_message'],
-  [SCREENS.REVIEW]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'quote', 'quote_generated_at', 'error_message'],
+  [SCREENS.VIEW_ENTRY]: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
+  [SCREENS.RESERVE_ENTRY]: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
+  [SCREENS.START]: ['has_error', 'error_message'],
+  [SCREENS.PROPERTIES]: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'quote_generated_at', 'has_error', 'error_message'],
+  [SCREENS.DETAILS]: ['property_id', 'property_name', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  [SCREENS.CALENDAR]: ['property_id', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'unavailable_dates', 'calendar_refreshed_at', 'has_error', 'error_message'],
+  [SCREENS.GUESTS]: ['property_id', 'check_in', 'check_out', 'max_guests', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  [SCREENS.QUOTE]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'quote_generated_at', 'has_error'],
+  [SCREENS.GUEST_DETAILS]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  [SCREENS.REVIEW]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'has_special_requests', 'quote', 'quote_generated_at', 'has_error', 'error_message'],
   [SCREENS.COMPLETE]: ['enquiry_reference', 'enquiry_status', 'payment_status', 'continuation_type', 'continuation_url', 'replayed', 'message']
 });
-const screenResponse = (screen, data) => ({
-  screen,
-  data: Object.fromEntries((SCREEN_DATA_FIELDS[screen] || []).filter(key => data[key] !== undefined).map(key => [key, data[key]]))
-});
+const screenResponse = (screen, data) => {
+  const allowed = SCREEN_DATA_FIELDS[screen] || [];
+  const entries = allowed
+    .filter(key => data[key] !== undefined)
+    .map(key => [key, data[key]]);
+  if (allowed.includes('has_error') && data.has_error === undefined) {
+    entries.push(['has_error', false]);
+  }
+  return { screen, data: Object.fromEntries(entries) };
+};
 const normalizeStayData = data => {
   const stayDates = data.stay_dates && typeof data.stay_dates === 'object' ? data.stay_dates : {};
   const check_in = stayDates['start-date'] || stayDates.start_date || stayDates['startDate'] || data.check_in;
@@ -240,7 +247,8 @@ const handleFlowAction = async (db, payload) => {
     const phone = validatePhoneNumber(data.whatsapp_number, data.country_code || 'IN');
     if (!String(data.guest_name || '').trim()) return errorResponse(SCREENS.GUEST_DETAILS, 'Guest name is required', data);
     if (!phone.valid || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(data.guest_email || '').trim())) return errorResponse(SCREENS.GUEST_DETAILS, 'Enter a valid email address and WhatsApp number', data);
-    return screenResponse(SCREENS.REVIEW, { ...data, check_in: priced.stay.check_in, check_out: priced.stay.check_out, whatsapp_number: phone.normalizedNumber, property_name: priced.property.property_name, quote: priced.property.quote, quote_generated_at: new Date().toISOString() });
+    const hasSpecialRequests = Boolean(String(data.special_requests || '').trim());
+    return screenResponse(SCREENS.REVIEW, { ...data, check_in: priced.stay.check_in, check_out: priced.stay.check_out, whatsapp_number: phone.normalizedNumber, property_name: priced.property.property_name, quote: priced.property.quote, has_special_requests: hasSpecialRequests, has_error: false, quote_generated_at: new Date().toISOString() });
   }
   if (payload.screen === SCREENS.REVIEW) {
     const result = await createPendingEnquiry(db, { ...data, flow_token: payload.flow_token || data.flow_token }); if (result.error) return errorResponse(SCREENS.REVIEW, result.error, data);

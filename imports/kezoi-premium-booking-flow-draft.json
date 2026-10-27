@@ -22,6 +22,7 @@
         "property_id": { "type": "string", "__example__": "1" },
         "property_code": { "type": "string", "__example__": "TG-0001" },
         "entry_intent": { "type": "string", "__example__": "view_stay" },
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -29,7 +30,7 @@
         "children": [
           { "type": "TextHeading", "text": "Kezoi Stays" },
           { "type": "TextBody", "text": "Load current property photographs, details and amenities." },
-          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
             "label": "View property",
@@ -52,6 +53,7 @@
         "property_id": { "type": "string", "__example__": "1" },
         "property_code": { "type": "string", "__example__": "TG-0001" },
         "entry_intent": { "type": "string", "__example__": "reserve" },
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -59,7 +61,7 @@
         "children": [
           { "type": "TextHeading", "text": "Reserve Kezoi Stays" },
           { "type": "TextBody", "text": "Continue to the live availability calendar for the selected property." },
-          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
             "label": "Select dates",
@@ -79,6 +81,7 @@
       "id": "BOOKING_DETAILS",
       "title": "Explore Kezoi Stays",
       "data": {
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -96,7 +99,7 @@
             "children": [
               { "type": "TextHeading", "text": "Find your perfect stay" },
               { "type": "TextBody", "text": "Choose dates and party size. Availability and prices are checked live." },
-              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               {
                 "type": "CalendarPicker",
                 "name": "stay_dates",
@@ -163,6 +166,7 @@
           ]
         },
         "no_properties_available": { "type": "boolean", "__example__": false },
+        "has_error": { "type": "boolean", "__example__": false },
         "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
         "error_message": { "type": "string", "__example__": "" }
       },
@@ -176,7 +180,7 @@
               { "type": "TextHeading", "text": "Choose a property" },
               { "type": "TextBody", "text": "Live results for ${data.check_in} to ${data.check_out}." },
               { "type": "TextBody", "text": "No property is available for those dates and guests.", "visible": "${data.no_properties_available}" },
-              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               { "type": "RadioButtonsGroup", "name": "property_id", "label": "Properties", "data-source": "${data.properties}", "required": true },
               {
                 "type": "Footer",
@@ -227,6 +231,7 @@
         "children": { "type": "number", "__example__": 0 },
         "infants": { "type": "number", "__example__": 0 },
         "pets": { "type": "number", "__example__": 0 },
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -240,7 +245,7 @@
           { "type": "TextSubheading", "text": "Amenities & facilities" },
           { "type": "TextBody", "text": "${data.amenities_text}" },
           { "type": "TextCaption", "text": "Up to ${data.max_guests} guests" },
-          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
             "label": "Reserve",
@@ -273,6 +278,7 @@
         "pets": { "type": "number", "__example__": 0 },
         "unavailable_dates": { "type": "array", "items": { "type": "string" }, "__example__": ["2026-11-10"] },
         "calendar_refreshed_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -283,7 +289,7 @@
             "name": "calendar_form",
             "children": [
               { "type": "TextBody", "text": "Unavailable nights are disabled from live booking data." },
-              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               {
                 "type": "CalendarPicker",
                 "name": "stay_dates",
@@ -336,6 +342,7 @@
         "children": { "type": "number", "__example__": 0 },
         "infants": { "type": "number", "__example__": 0 },
         "pets": { "type": "number", "__example__": 0 },
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -352,7 +359,7 @@
             },
             "children": [
               { "type": "TextBody", "text": "This property accommodates up to ${data.max_guests} guests." },
-              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               { "type": "TextInput", "name": "adults", "label": "Adults", "input-type": "number", "required": true, "helper-text": "Minimum 1 adult" },
               { "type": "TextInput", "name": "children", "label": "Children", "input-type": "number", "required": false, "helper-text": "Ages 2–12" },
               { "type": "TextInput", "name": "infants", "label": "Infants", "input-type": "number", "required": false, "helper-text": "Under 2" },
@@ -402,6 +409,7 @@
         "gst_amount": { "type": "number", "__example__": 3599.64 },
         "total_amount": { "type": "number", "__example__": 23597.64 },
         "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -413,7 +421,7 @@
           { "type": "TextBody", "text": "Stay (${data.nights} nights): ${data.currency} ${data.base_amount}\nExtra guest charges: ${data.currency} ${data.extra_guest_amount}\nTaxable amount: ${data.currency} ${data.taxable_amount}\nGST (${data.gst_rate}%): ${data.currency} ${data.gst_amount}\n  • CGST: ${data.currency} ${data.cgst_amount}\n  • SGST: ${data.currency} ${data.sgst_amount}" },
           { "type": "TextHeading", "text": "Total: ${data.currency} ${data.total_amount}" },
           { "type": "TextCaption", "text": "Live quote calculated on ${data.quote_generated_at}. Availability and prices are verified again before enquiry creation." },
-          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
             "label": "Continue to guest details",
@@ -446,6 +454,7 @@
         "children": { "type": "number", "__example__": 0 },
         "infants": { "type": "number", "__example__": 0 },
         "pets": { "type": "number", "__example__": 0 },
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -458,7 +467,7 @@
               "country_code": "IN"
             },
             "children": [
-              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               { "type": "TextInput", "name": "guest_name", "label": "Full name", "input-type": "text", "required": true },
               { "type": "TextInput", "name": "guest_email", "label": "Email", "input-type": "email", "required": true },
               { "type": "TextInput", "name": "whatsapp_number", "label": "WhatsApp number with country code", "input-type": "phone", "required": true, "helper-text": "e.g. +91 98765 43210" },
@@ -539,6 +548,8 @@
           }
         },
         "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
+        "has_special_requests": { "type": "boolean", "__example__": false },
+        "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
       "layout": {
@@ -549,12 +560,12 @@
           { "type": "TextBody", "text": "${data.check_in} to ${data.check_out}\nAdults: ${data.adults} • Children: ${data.children} • Infants: ${data.infants} • Pets: ${data.pets}" },
           { "type": "TextSubheading", "text": "Guest contact" },
           { "type": "TextBody", "text": "Name: ${data.guest_name}\nEmail: ${data.guest_email}\nWhatsApp: ${data.whatsapp_number}\nCountry code: ${data.country_code}" },
-          { "type": "TextBody", "text": "Special requests: ${data.special_requests}", "visible": "${data.special_requests != ''}" },
+          { "type": "TextBody", "text": "Special requests: ${data.special_requests}", "visible": "${data.has_special_requests}" },
           { "type": "TextSubheading", "text": "Quotation summary" },
           { "type": "TextBody", "text": "Stay (${data.quote.nights} nights): ${data.quote.currency} ${data.quote.base_amount}\nExtra guests: ${data.quote.currency} ${data.quote.extra_guest_amount}\nTaxable amount: ${data.quote.currency} ${data.quote.taxable_amount}\nGST (${data.quote.gst_rate}%): ${data.quote.currency} ${data.quote.gst_amount} (CGST: ${data.quote.currency} ${data.quote.cgst_amount} + SGST: ${data.quote.currency} ${data.quote.sgst_amount})" },
           { "type": "TextHeading", "text": "Total: ${data.quote.currency} ${data.quote.total_amount}" },
           { "type": "TextCaption", "text": "Submitting creates a pending enquiry only. No payment is taken and no reservation is confirmed until approved." },
-          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
             "label": "Confirm & create enquiry",

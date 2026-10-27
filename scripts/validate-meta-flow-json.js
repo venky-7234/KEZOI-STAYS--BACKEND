@@ -83,16 +83,16 @@ console.log('✔ 5. All screen data models typed with valid examples and item sc
 
 // 6. Backend Contract Compliance (SCREEN_DATA_FIELDS)
 const SCREEN_DATA_FIELDS = {
-  VIEW_STAY_ENTRY: ['property_id', 'property_code', 'entry_intent', 'error_message'],
-  RESERVE_ENTRY: ['property_id', 'property_code', 'entry_intent', 'error_message'],
-  BOOKING_DETAILS: ['error_message'],
-  PROPERTY_SELECTION: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'quote_generated_at', 'error_message'],
-  PROPERTY_DETAILS: ['property_id', 'property_name', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'error_message'],
-  CALENDAR: ['property_id', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'unavailable_dates', 'calendar_refreshed_at', 'error_message'],
-  GUEST_SELECTION: ['property_id', 'check_in', 'check_out', 'max_guests', 'adults', 'children', 'infants', 'pets', 'error_message'],
-  LIVE_QUOTE: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'quote_generated_at'],
-  GUEST_DETAILS: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'error_message'],
-  BOOKING_REVIEW: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'quote', 'quote_generated_at', 'error_message'],
+  VIEW_STAY_ENTRY: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
+  RESERVE_ENTRY: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
+  BOOKING_DETAILS: ['has_error', 'error_message'],
+  PROPERTY_SELECTION: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'quote_generated_at', 'has_error', 'error_message'],
+  PROPERTY_DETAILS: ['property_id', 'property_name', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  CALENDAR: ['property_id', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'unavailable_dates', 'calendar_refreshed_at', 'has_error', 'error_message'],
+  GUEST_SELECTION: ['property_id', 'check_in', 'check_out', 'max_guests', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  LIVE_QUOTE: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'quote_generated_at', 'has_error'],
+  GUEST_DETAILS: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  BOOKING_REVIEW: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'has_special_requests', 'quote', 'quote_generated_at', 'has_error', 'error_message'],
   ENQUIRY_CREATED: ['enquiry_reference', 'enquiry_status', 'payment_status', 'continuation_type', 'continuation_url', 'replayed', 'message']
 };
 
@@ -113,6 +113,25 @@ const validComponentTypes = new Set([
 
 function validateComponent(comp, screen, formComponents = new Set()) {
   assert.ok(validComponentTypes.has(comp.type), `Unknown component type: ${comp.type} in ${screen.id}`);
+
+  // Validate visible property according to Meta Flow Schema
+  if (comp.visible !== undefined) {
+    if (typeof comp.visible === 'boolean') {
+      // Literal boolean is valid
+    } else if (typeof comp.visible === 'string' && comp.visible.startsWith('${') && comp.visible.endsWith('}')) {
+      const inner = comp.visible.slice(2, -1).trim();
+      assert.ok(
+        /^(data|screen\.data)\.[a-zA-Z0-9_]+$/.test(inner),
+        `Component ${comp.type} in ${screen.id} has invalid visible expression: '${comp.visible}'. Must be boolean or \${data.boolean_field}`
+      );
+      const fieldName = inner.replace(/^(data|screen\.data)\./, '');
+      const dataField = screen.data[fieldName];
+      assert.ok(dataField, `Component ${comp.type} in ${screen.id} visible references undeclared field: ${fieldName}`);
+      assert.equal(dataField.type, 'boolean', `Component ${comp.type} in ${screen.id} visible references field ${fieldName} of type ${dataField.type}, must be boolean`);
+    } else {
+      assert.fail(`Component ${comp.type} in ${screen.id} has invalid visible type: ${typeof comp.visible}`);
+    }
+  }
 
   if (comp.children) {
     const isForm = comp.type === 'Form';
