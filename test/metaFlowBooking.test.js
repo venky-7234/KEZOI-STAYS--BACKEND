@@ -182,3 +182,211 @@ test('requires the guest name before booking review', async () => {
   assert.equal(response.screen, 'GUEST_DETAILS');
   assert.match(response.data.error_message, /Guest name is required/);
 });
+
+test('handles CalendarPicker stay_dates object payload and numeric guest counts for LIVE_QUOTE', async () => {
+  const db = fakeDb();
+  // 1. BOOKING_DETAILS with stay_dates object (from form.stay_dates) and numeric guests
+  const bookingDetailsPayload = {
+    stay_dates: { 'start-date': '2026-11-01', 'end-date': '2026-11-03' },
+    guests: 3,
+    children: 1,
+    infants: 0,
+    pets: 0,
+    location: 'Manikonda'
+  };
+  let response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'BOOKING_DETAILS',
+    data: bookingDetailsPayload
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_SELECTION');
+  assert.equal(response.data.check_in, '2026-11-01');
+  assert.equal(response.data.check_out, '2026-11-03');
+  assert.equal(response.data.adults, 3);
+
+  // 2. CALENDAR with stay_dates object
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'CALENDAR',
+    data: {
+      property_id: '1',
+      stay_dates: { 'start-date': '2026-11-04', 'end-date': '2026-11-07' },
+      adults: 2,
+      children: 0,
+      infants: 0,
+      pets: 0
+    }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'GUEST_SELECTION');
+  assert.equal(response.data.check_in, '2026-11-04');
+  assert.equal(response.data.check_out, '2026-11-07');
+
+  // 3. GUEST_SELECTION proceeding to LIVE_QUOTE with dynamic fields
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'GUEST_SELECTION',
+    data: {
+      property_id: '1',
+      check_in: '2026-11-04',
+      check_out: '2026-11-07',
+      adults: 3,
+      children: 1,
+      infants: 0,
+      pets: 0
+    }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'LIVE_QUOTE');
+  assert.equal(response.data.nights, 3);
+  assert.equal(typeof response.data.nights, 'number');
+  assert.equal(response.data.check_in, '2026-11-04');
+  assert.equal(typeof response.data.check_in, 'string');
+  assert.equal(response.data.check_out, '2026-11-07');
+  assert.equal(typeof response.data.check_out, 'string');
+});
+
+test('rejects missing, malformed, or inverted date ranges and preserves screen context', async () => {
+  const db = fakeDb();
+
+  // 1. Missing dates on BOOKING_DETAILS
+  let response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'BOOKING_DETAILS',
+    data: { guests: 2 }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'BOOKING_DETAILS');
+  assert.match(response.data.error_message, /YYYY-MM-DD/);
+
+  // 2. Malformed dates
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'BOOKING_DETAILS',
+    data: { check_in: '01-11-2026', check_out: '05-11-2026', guests: 2 }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'BOOKING_DETAILS');
+  assert.match(response.data.error_message, /YYYY-MM-DD/);
+
+  // 3. check_out equal to check_in
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'CALENDAR',
+    data: { property_id: '1', check_in: '2026-11-05', check_out: '2026-11-05', adults: 2 }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'CALENDAR');
+  assert.match(response.data.error_message, /check_out must be after check_in/);
+  assert.ok(Array.isArray(response.data.unavailable_dates), 'Unavailable dates must be preserved on CALENDAR error');
+
+  // 4. check_out before check_in
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'CALENDAR',
+    data: { property_id: '1', check_in: '2026-11-08', check_out: '2026-11-05', adults: 2 }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'CALENDAR');
+  assert.match(response.data.error_message, /check_out must be after check_in/);
+});
+
+test('validates numeric guest counts, non-negativity, whole numbers, and property capacity', async () => {
+  const db = fakeDb();
+
+  // 1. Adults = 0
+  let response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'GUEST_SELECTION',
+    data: { property_id: '1', check_in: '2026-11-01', check_out: '2026-11-03', adults: 0 }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'GUEST_SELECTION');
+  assert.match(response.data.error_message, /adults must be at least 1/);
+
+  // 2. Negative children count
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'GUEST_SELECTION',
+    data: { property_id: '1', check_in: '2026-11-01', check_out: '2026-11-03', adults: 2, children: -1 }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'GUEST_SELECTION');
+  assert.match(response.data.error_message, /non-negative whole numbers/);
+
+  // 3. Fractional guest count
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'GUEST_SELECTION',
+    data: { property_id: '1', check_in: '2026-11-01', check_out: '2026-11-03', adults: 2.5 }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'GUEST_SELECTION');
+  assert.match(response.data.error_message, /non-negative whole numbers/);
+
+  // 4. Exceeds property capacity (max_guests = 8)
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'GUEST_SELECTION',
+    data: { property_id: '1', check_in: '2026-11-01', check_out: '2026-11-03', adults: 7, children: 3 }
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'GUEST_SELECTION');
+  assert.match(response.data.error_message, /cannot accommodate these guests/);
+});
+
+test('handles duplicate final submissions idempotently and detects tamper attempts', async () => {
+  process.env.JWT_SECRET = 'test-secret-at-least-for-signing';
+  process.env.WEBSITE_APPLICATION_URL = 'https://guest.kezoistays.test/identity-upload';
+  const db = fakeDb();
+  const guestPayload = {
+    ...base,
+    guest_name: 'Idempotency Test Guest',
+    guest_email: 'idempotent@example.com',
+    whatsapp_number: '+919876543210',
+    country_code: 'IN',
+    flow_token: 'token-idem-999'
+  };
+
+  // 1. Initial submission succeeds and creates enquiry
+  let response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'BOOKING_REVIEW',
+    flow_token: guestPayload.flow_token,
+    data: guestPayload
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'ENQUIRY_CREATED');
+  assert.equal(response.data.replayed, false);
+  assert.equal(response.data.enquiry_reference, 'APP-42');
+
+  // 2. Duplicate submission with the same flow token returns replayed enquiry
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'BOOKING_REVIEW',
+    flow_token: guestPayload.flow_token,
+    data: guestPayload
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'ENQUIRY_CREATED');
+  assert.equal(response.data.replayed, true);
+  assert.equal(response.data.enquiry_reference, 'APP-42');
+
+  // 3. Re-submission with the same token but tampered guest name/details is rejected with conflict
+  const tamperedPayload = { ...guestPayload, guest_name: 'Tampered Attacker' };
+  response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'BOOKING_REVIEW',
+    flow_token: guestPayload.flow_token,
+    data: tamperedPayload
+  });
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'BOOKING_REVIEW');
+  assert.match(response.data.error_message, /already used for different booking details/);
+
+  delete process.env.JWT_SECRET;
+  delete process.env.WEBSITE_APPLICATION_URL;
+});
+
+

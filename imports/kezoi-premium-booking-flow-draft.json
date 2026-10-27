@@ -2,16 +2,16 @@
   "version": "7.3",
   "data_api_version": "3.0",
   "routing_model": {
-    "VIEW_STAY_ENTRY": ["PROPERTY_DETAILS"],
-    "RESERVE_ENTRY": ["CALENDAR"],
-    "BOOKING_DETAILS": ["PROPERTY_SELECTION"],
-    "PROPERTY_SELECTION": ["PROPERTY_DETAILS"],
-    "PROPERTY_DETAILS": ["CALENDAR"],
-    "CALENDAR": ["GUEST_SELECTION"],
-    "GUEST_SELECTION": ["LIVE_QUOTE"],
-    "LIVE_QUOTE": ["GUEST_DETAILS"],
-    "GUEST_DETAILS": ["BOOKING_REVIEW"],
-    "BOOKING_REVIEW": ["ENQUIRY_CREATED"],
+    "VIEW_STAY_ENTRY": ["VIEW_STAY_ENTRY", "PROPERTY_DETAILS"],
+    "RESERVE_ENTRY": ["RESERVE_ENTRY", "CALENDAR"],
+    "BOOKING_DETAILS": ["BOOKING_DETAILS", "PROPERTY_SELECTION"],
+    "PROPERTY_SELECTION": ["PROPERTY_SELECTION", "PROPERTY_DETAILS"],
+    "PROPERTY_DETAILS": ["PROPERTY_DETAILS", "CALENDAR"],
+    "CALENDAR": ["CALENDAR", "GUEST_SELECTION"],
+    "GUEST_SELECTION": ["GUEST_SELECTION", "LIVE_QUOTE"],
+    "LIVE_QUOTE": ["LIVE_QUOTE", "GUEST_DETAILS"],
+    "GUEST_DETAILS": ["GUEST_DETAILS", "BOOKING_REVIEW"],
+    "BOOKING_REVIEW": ["BOOKING_REVIEW", "ENQUIRY_CREATED"],
     "ENQUIRY_CREATED": []
   },
   "screens": [
@@ -24,12 +24,26 @@
         "entry_intent": { "type": "string", "__example__": "view_stay" },
         "error_message": { "type": "string", "__example__": "" }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [
-        { "type": "TextHeading", "text": "Kezoi Stays" },
-        { "type": "TextBody", "text": "Load current property photographs, details and amenities." },
-        { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
-        { "type": "Footer", "label": "View property", "on-click-action": { "name": "data_exchange", "payload": { "property_id": "${data.property_id}", "property_code": "${data.property_code}", "entry_intent": "view_stay" } } }
-      ] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextHeading", "text": "Kezoi Stays" },
+          { "type": "TextBody", "text": "Load current property photographs, details and amenities." },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          {
+            "type": "Footer",
+            "label": "View property",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "property_id": "${data.property_id}",
+                "property_code": "${data.property_code}",
+                "entry_intent": "view_stay"
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "RESERVE_ENTRY",
@@ -40,12 +54,26 @@
         "entry_intent": { "type": "string", "__example__": "reserve" },
         "error_message": { "type": "string", "__example__": "" }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [
-        { "type": "TextHeading", "text": "Reserve Kezoi Stays" },
-        { "type": "TextBody", "text": "Continue to the live availability calendar for the selected property." },
-        { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
-        { "type": "Footer", "label": "Select dates", "on-click-action": { "name": "data_exchange", "payload": { "property_id": "${data.property_id}", "property_code": "${data.property_code}", "entry_intent": "reserve" } } }
-      ] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextHeading", "text": "Reserve Kezoi Stays" },
+          { "type": "TextBody", "text": "Continue to the live availability calendar for the selected property." },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          {
+            "type": "Footer",
+            "label": "Select dates",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "property_id": "${data.property_id}",
+                "property_code": "${data.property_code}",
+                "entry_intent": "reserve"
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "BOOKING_DETAILS",
@@ -59,24 +87,46 @@
           {
             "type": "Form",
             "name": "booking_details_form",
+            "init-values": {
+              "guests": 2,
+              "children": 0,
+              "infants": 0,
+              "pets": 0
+            },
             "children": [
               { "type": "TextHeading", "text": "Find your perfect stay" },
               { "type": "TextBody", "text": "Choose dates and party size. Availability and prices are checked live." },
               { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
-              { "type": "CalendarPicker", "name": "stay_dates", "label": { "start-date": "Check-in", "end-date": "Check-out" }, "title": "Select check-in and check-out", "description": "Checkout is exclusive", "mode": "range", "required": { "start-date": true, "end-date": true } },
-              { "type": "TextInput", "name": "guests", "label": "Adults", "input-type": "number", "required": true },
-              { "type": "TextInput", "name": "children", "label": "Children", "input-type": "number", "required": true },
-              { "type": "TextInput", "name": "infants", "label": "Infants", "input-type": "number", "required": true },
-              { "type": "TextInput", "name": "pets", "label": "Pets", "input-type": "number", "required": true },
+              {
+                "type": "CalendarPicker",
+                "name": "stay_dates",
+                "label": {
+                  "start-date": "Check-in",
+                  "end-date": "Check-out"
+                },
+                "helper-text": {
+                  "start-date": "Select check-in date",
+                  "end-date": "Select check-out date (exclusive)"
+                },
+                "mode": "range",
+                "required": {
+                  "start-date": true,
+                  "end-date": true
+                }
+              },
+              { "type": "TextInput", "name": "guests", "label": "Adults", "input-type": "number", "required": true, "helper-text": "Minimum 1 adult" },
+              { "type": "TextInput", "name": "children", "label": "Children", "input-type": "number", "required": false, "helper-text": "Ages 2–12 (optional)" },
+              { "type": "TextInput", "name": "infants", "label": "Infants", "input-type": "number", "required": false, "helper-text": "Under 2 (optional)" },
+              { "type": "TextInput", "name": "pets", "label": "Pets", "input-type": "number", "required": false, "helper-text": "Service / companion pets (optional)" },
               {
                 "type": "Footer",
                 "label": "Explore properties",
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": {
-                    "check_in": "${form.stay_dates.start-date}",
-                    "check_out": "${form.stay_dates.end-date}",
+                    "stay_dates": "${form.stay_dates}",
                     "guests": "${form.guests}",
+                    "adults": "${form.guests}",
                     "children": "${form.children}",
                     "infants": "${form.infants}",
                     "pets": "${form.pets}"
@@ -94,14 +144,23 @@
       "data": {
         "check_in": { "type": "string", "__example__": "2026-11-01" },
         "check_out": { "type": "string", "__example__": "2026-11-03" },
-        "adults": { "type": "string", "__example__": "2" },
-        "children": { "type": "string", "__example__": "0" },
-        "infants": { "type": "string", "__example__": "0" },
-        "pets": { "type": "string", "__example__": "0" },
+        "adults": { "type": "number", "__example__": 2 },
+        "children": { "type": "number", "__example__": 0 },
+        "infants": { "type": "number", "__example__": 0 },
+        "pets": { "type": "number", "__example__": 0 },
         "properties": {
           "type": "array",
-          "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" } } },
-          "__example__": [{ "id": "1", "title": "Kezoi Stays Manikonda", "description": "3 bedrooms | 3 bathrooms | INR 23598" }]
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "1", "title": "Kezoi Stays Manikonda", "description": "3 bedrooms | 3 bathrooms | INR 23598" }
+          ]
         },
         "no_properties_available": { "type": "boolean", "__example__": false },
         "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
@@ -125,8 +184,13 @@
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": {
-                    "property_id": "${form.property_id}", "check_in": "${data.check_in}", "check_out": "${data.check_out}",
-                    "adults": "${data.adults}", "children": "${data.children}", "infants": "${data.infants}", "pets": "${data.pets}"
+                    "property_id": "${form.property_id}",
+                    "check_in": "${data.check_in}",
+                    "check_out": "${data.check_out}",
+                    "adults": "${data.adults}",
+                    "children": "${data.children}",
+                    "infants": "${data.infants}",
+                    "pets": "${data.pets}"
                   }
                 }
               }
@@ -139,122 +203,425 @@
       "id": "PROPERTY_DETAILS",
       "title": "Property details",
       "data": {
-        "property_id": { "type": "string", "__example__": "1" }, "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" },
-        "property_description": { "type": "string", "__example__": "A premium Kezoi stay." }, "property_location": { "type": "string", "__example__": "Manikonda, Hyderabad" },
-        "amenities": { "type": "array", "items": { "type": "string" }, "__example__": ["Wi-Fi", "Kitchen"] }, "amenities_text": { "type": "string", "__example__": "Wi-Fi • Kitchen" }, "max_guests": { "type": "number", "__example__": 10 },
-        "gallery": { "type": "array", "items": { "type": "object", "properties": { "src": { "type": "string" }, "alt-text": { "type": "string" } } }, "__example__": [{ "src": "iVBORw0KGgo=", "alt-text": "Living room" }] },
-        "check_in": { "type": "string", "__example__": "2026-11-01" }, "check_out": { "type": "string", "__example__": "2026-11-03" },
-        "adults": { "type": "string", "__example__": "2" }, "children": { "type": "string", "__example__": "0" }, "infants": { "type": "string", "__example__": "0" }, "pets": { "type": "string", "__example__": "0" },
+        "property_id": { "type": "string", "__example__": "1" },
+        "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" },
+        "property_description": { "type": "string", "__example__": "A premium Kezoi stay." },
+        "property_location": { "type": "string", "__example__": "Manikonda, Hyderabad" },
+        "amenities": { "type": "array", "items": { "type": "string" }, "__example__": ["Wi-Fi", "Kitchen"] },
+        "amenities_text": { "type": "string", "__example__": "Wi-Fi • Kitchen" },
+        "max_guests": { "type": "number", "__example__": 10 },
+        "gallery": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "src": { "type": "string" },
+              "alt-text": { "type": "string" }
+            }
+          },
+          "__example__": [{ "src": "iVBORw0KGgo=", "alt-text": "Living room" }]
+        },
+        "check_in": { "type": "string", "__example__": "2026-11-01" },
+        "check_out": { "type": "string", "__example__": "2026-11-03" },
+        "adults": { "type": "number", "__example__": 2 },
+        "children": { "type": "number", "__example__": 0 },
+        "infants": { "type": "number", "__example__": 0 },
+        "pets": { "type": "number", "__example__": 0 },
         "error_message": { "type": "string", "__example__": "" }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [
-        { "type": "ImageCarousel", "images": "${data.gallery}", "aspect-ratio": "4:3", "scale-type": "cover" },
-        { "type": "TextHeading", "text": "${data.property_name}" },
-        { "type": "TextBody", "text": "${data.property_description}" },
-        { "type": "TextSubheading", "text": "Location" }, { "type": "TextBody", "text": "${data.property_location}" },
-        { "type": "TextSubheading", "text": "Amenities & facilities" }, { "type": "TextBody", "text": "${data.amenities_text}" },
-        { "type": "TextCaption", "text": "Up to ${data.max_guests} guests" },
-        { "type": "Footer", "label": "Reserve", "on-click-action": { "name": "data_exchange", "payload": {
-          "property_id": "${data.property_id}", "check_in": "${data.check_in}", "check_out": "${data.check_out}", "adults": "${data.adults}", "children": "${data.children}", "infants": "${data.infants}", "pets": "${data.pets}"
-        } } }
-      ] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "ImageCarousel", "images": "${data.gallery}", "aspect-ratio": "4:3", "scale-type": "cover" },
+          { "type": "TextHeading", "text": "${data.property_name}" },
+          { "type": "TextBody", "text": "${data.property_description}" },
+          { "type": "TextSubheading", "text": "Location" },
+          { "type": "TextBody", "text": "${data.property_location}" },
+          { "type": "TextSubheading", "text": "Amenities & facilities" },
+          { "type": "TextBody", "text": "${data.amenities_text}" },
+          { "type": "TextCaption", "text": "Up to ${data.max_guests} guests" },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          {
+            "type": "Footer",
+            "label": "Reserve",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "property_id": "${data.property_id}",
+                "check_in": "${data.check_in}",
+                "check_out": "${data.check_out}",
+                "adults": "${data.adults}",
+                "children": "${data.children}",
+                "infants": "${data.infants}",
+                "pets": "${data.pets}"
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "CALENDAR",
       "title": "Select dates",
       "data": {
-        "property_id": { "type": "string", "__example__": "1" }, "check_in": { "type": "string", "__example__": "2026-11-01" }, "check_out": { "type": "string", "__example__": "2026-11-03" },
-        "adults": { "type": "string", "__example__": "2" }, "children": { "type": "string", "__example__": "0" }, "infants": { "type": "string", "__example__": "0" }, "pets": { "type": "string", "__example__": "0" },
-        "unavailable_dates": { "type": "array", "items": { "type": "string" }, "__example__": ["2026-11-10"] }, "calendar_refreshed_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
+        "property_id": { "type": "string", "__example__": "1" },
+        "check_in": { "type": "string", "__example__": "2026-11-01" },
+        "check_out": { "type": "string", "__example__": "2026-11-03" },
+        "adults": { "type": "number", "__example__": 2 },
+        "children": { "type": "number", "__example__": 0 },
+        "infants": { "type": "number", "__example__": 0 },
+        "pets": { "type": "number", "__example__": 0 },
+        "unavailable_dates": { "type": "array", "items": { "type": "string" }, "__example__": ["2026-11-10"] },
+        "calendar_refreshed_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
         "error_message": { "type": "string", "__example__": "" }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [{ "type": "Form", "name": "calendar_form", "children": [
-        { "type": "TextBody", "text": "Unavailable nights are disabled from live booking data." },
-        { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
-        { "type": "CalendarPicker", "name": "stay_dates", "label": { "start-date": "Check-in", "end-date": "Check-out" }, "title": "Choose available dates", "mode": "range", "unavailable-dates": "${data.unavailable_dates}", "required": { "start-date": true, "end-date": true } },
-        { "type": "Footer", "label": "Select guests", "on-click-action": { "name": "data_exchange", "payload": {
-          "property_id": "${data.property_id}", "check_in": "${form.stay_dates.start-date}", "check_out": "${form.stay_dates.end-date}", "adults": "${data.adults}", "children": "${data.children}", "infants": "${data.infants}", "pets": "${data.pets}"
-        } } }
-      ] }] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "calendar_form",
+            "children": [
+              { "type": "TextBody", "text": "Unavailable nights are disabled from live booking data." },
+              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+              {
+                "type": "CalendarPicker",
+                "name": "stay_dates",
+                "label": {
+                  "start-date": "Check-in",
+                  "end-date": "Check-out"
+                },
+                "helper-text": {
+                  "start-date": "Select check-in date",
+                  "end-date": "Select check-out date (exclusive)"
+                },
+                "mode": "range",
+                "unavailable-dates": "${data.unavailable_dates}",
+                "required": {
+                  "start-date": true,
+                  "end-date": true
+                }
+              },
+              {
+                "type": "Footer",
+                "label": "Select guests",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "property_id": "${data.property_id}",
+                    "stay_dates": "${form.stay_dates}",
+                    "check_in": "${data.check_in}",
+                    "check_out": "${data.check_out}",
+                    "adults": "${data.adults}",
+                    "children": "${data.children}",
+                    "infants": "${data.infants}",
+                    "pets": "${data.pets}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
     },
     {
-      "id": "GUEST_SELECTION", "title": "Guests",
+      "id": "GUEST_SELECTION",
+      "title": "Guests",
       "data": {
-        "property_id": { "type": "string", "__example__": "1" }, "check_in": { "type": "string", "__example__": "2026-11-01" }, "check_out": { "type": "string", "__example__": "2026-11-03" }, "max_guests": { "type": "number", "__example__": 10 },
-        "adults": { "type": "string", "__example__": "2" }, "children": { "type": "string", "__example__": "0" }, "infants": { "type": "string", "__example__": "0" }, "pets": { "type": "string", "__example__": "0" }, "error_message": { "type": "string", "__example__": "" }
+        "property_id": { "type": "string", "__example__": "1" },
+        "check_in": { "type": "string", "__example__": "2026-11-01" },
+        "check_out": { "type": "string", "__example__": "2026-11-03" },
+        "max_guests": { "type": "number", "__example__": 10 },
+        "adults": { "type": "number", "__example__": 2 },
+        "children": { "type": "number", "__example__": 0 },
+        "infants": { "type": "number", "__example__": 0 },
+        "pets": { "type": "number", "__example__": 0 },
+        "error_message": { "type": "string", "__example__": "" }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [{ "type": "Form", "name": "guest_selection_form", "children": [
-        { "type": "TextBody", "text": "This property accommodates up to ${data.max_guests} guests." }, { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
-        { "type": "TextInput", "name": "adults", "label": "Adults", "input-type": "number", "required": true }, { "type": "TextInput", "name": "children", "label": "Children", "input-type": "number", "required": true },
-        { "type": "TextInput", "name": "infants", "label": "Infants", "input-type": "number", "required": true }, { "type": "TextInput", "name": "pets", "label": "Pets", "input-type": "number", "required": true },
-        { "type": "Footer", "label": "Get live quotation", "on-click-action": { "name": "data_exchange", "payload": {
-          "property_id": "${data.property_id}", "check_in": "${data.check_in}", "check_out": "${data.check_out}", "adults": "${form.adults}", "children": "${form.children}", "infants": "${form.infants}", "pets": "${form.pets}"
-        } } }
-      ] }] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "guest_selection_form",
+            "init-values": {
+              "adults": "${data.adults}",
+              "children": "${data.children}",
+              "infants": "${data.infants}",
+              "pets": "${data.pets}"
+            },
+            "children": [
+              { "type": "TextBody", "text": "This property accommodates up to ${data.max_guests} guests." },
+              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+              { "type": "TextInput", "name": "adults", "label": "Adults", "input-type": "number", "required": true, "helper-text": "Minimum 1 adult" },
+              { "type": "TextInput", "name": "children", "label": "Children", "input-type": "number", "required": false, "helper-text": "Ages 2–12" },
+              { "type": "TextInput", "name": "infants", "label": "Infants", "input-type": "number", "required": false, "helper-text": "Under 2" },
+              { "type": "TextInput", "name": "pets", "label": "Pets", "input-type": "number", "required": false, "helper-text": "Service / companion pets" },
+              {
+                "type": "Footer",
+                "label": "Get live quotation",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "property_id": "${data.property_id}",
+                    "check_in": "${data.check_in}",
+                    "check_out": "${data.check_out}",
+                    "adults": "${form.adults}",
+                    "children": "${form.children}",
+                    "infants": "${form.infants}",
+                    "pets": "${form.pets}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
     },
     {
-      "id": "LIVE_QUOTE", "title": "Your quotation",
+      "id": "LIVE_QUOTE",
+      "title": "Your quotation",
       "data": {
-        "property_id": { "type": "string", "__example__": "1" }, "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" }, "check_in": { "type": "string", "__example__": "2026-11-01" }, "check_out": { "type": "string", "__example__": "2026-11-03" },
-        "adults": { "type": "string", "__example__": "2" }, "children": { "type": "string", "__example__": "0" }, "infants": { "type": "string", "__example__": "0" }, "pets": { "type": "string", "__example__": "0" },
-        "nights": { "type": "number", "__example__": 2 }, "currency": { "type": "string", "__example__": "INR" }, "base_amount": { "type": "number", "__example__": 19998 }, "extra_guests": { "type": "number", "__example__": 0 }, "extra_guest_amount": { "type": "number", "__example__": 0 }, "taxable_amount": { "type": "number", "__example__": 19998 }, "gst_rate": { "type": "number", "__example__": 18 }, "cgst_amount": { "type": "number", "__example__": 1799.82 }, "sgst_amount": { "type": "number", "__example__": 1799.82 }, "gst_amount": { "type": "number", "__example__": 3599.64 }, "total_amount": { "type": "number", "__example__": 23597.64 }, "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" }
+        "property_id": { "type": "string", "__example__": "1" },
+        "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" },
+        "check_in": { "type": "string", "__example__": "2026-11-01" },
+        "check_out": { "type": "string", "__example__": "2026-11-03" },
+        "adults": { "type": "number", "__example__": 2 },
+        "children": { "type": "number", "__example__": 0 },
+        "infants": { "type": "number", "__example__": 0 },
+        "pets": { "type": "number", "__example__": 0 },
+        "nights": { "type": "number", "__example__": 2 },
+        "currency": { "type": "string", "__example__": "INR" },
+        "base_amount": { "type": "number", "__example__": 19998 },
+        "extra_guests": { "type": "number", "__example__": 0 },
+        "extra_guest_amount": { "type": "number", "__example__": 0 },
+        "taxable_amount": { "type": "number", "__example__": 19998 },
+        "gst_rate": { "type": "number", "__example__": 18 },
+        "cgst_amount": { "type": "number", "__example__": 1799.82 },
+        "sgst_amount": { "type": "number", "__example__": 1799.82 },
+        "gst_amount": { "type": "number", "__example__": 3599.64 },
+        "total_amount": { "type": "number", "__example__": 23597.64 },
+        "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
+        "error_message": { "type": "string", "__example__": "" }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [
-        { "type": "TextHeading", "text": "${data.property_name}" }, { "type": "TextBody", "text": "${data.nights} nights • ${data.check_in} to ${data.check_out}" },
-        { "type": "TextBody", "text": "Stay: ${data.currency} ${data.base_amount}\nExtra guests: ${data.currency} ${data.extra_guest_amount}\nTaxable amount: ${data.currency} ${data.taxable_amount}\nGST (${data.gst_rate}%): ${data.currency} ${data.gst_amount}" },
-        { "type": "TextHeading", "text": "Total: ${data.currency} ${data.total_amount}" }, { "type": "TextCaption", "text": "Live quote. Availability and price are checked again before enquiry creation." },
-        { "type": "Footer", "label": "Continue", "on-click-action": { "name": "data_exchange", "payload": {
-          "property_id": "${data.property_id}", "property_name": "${data.property_name}", "check_in": "${data.check_in}", "check_out": "${data.check_out}", "adults": "${data.adults}", "children": "${data.children}", "infants": "${data.infants}", "pets": "${data.pets}", "nights": "${data.nights}", "currency": "${data.currency}", "base_amount": "${data.base_amount}", "extra_guest_amount": "${data.extra_guest_amount}", "taxable_amount": "${data.taxable_amount}", "gst_rate": "${data.gst_rate}", "gst_amount": "${data.gst_amount}", "total_amount": "${data.total_amount}"
-        } } }
-      ] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextHeading", "text": "${data.property_name}" },
+          { "type": "TextBody", "text": "${data.nights} nights • ${data.check_in} to ${data.check_out}" },
+          { "type": "TextSubheading", "text": "Price Breakdown" },
+          { "type": "TextBody", "text": "Stay (${data.nights} nights): ${data.currency} ${data.base_amount}\nExtra guest charges: ${data.currency} ${data.extra_guest_amount}\nTaxable amount: ${data.currency} ${data.taxable_amount}\nGST (${data.gst_rate}%): ${data.currency} ${data.gst_amount}\n  • CGST: ${data.currency} ${data.cgst_amount}\n  • SGST: ${data.currency} ${data.sgst_amount}" },
+          { "type": "TextHeading", "text": "Total: ${data.currency} ${data.total_amount}" },
+          { "type": "TextCaption", "text": "Live quote calculated on ${data.quote_generated_at}. Availability and prices are verified again before enquiry creation." },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          {
+            "type": "Footer",
+            "label": "Continue to guest details",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "property_id": "${data.property_id}",
+                "property_name": "${data.property_name}",
+                "check_in": "${data.check_in}",
+                "check_out": "${data.check_out}",
+                "adults": "${data.adults}",
+                "children": "${data.children}",
+                "infants": "${data.infants}",
+                "pets": "${data.pets}"
+              }
+            }
+          }
+        ]
+      }
     },
     {
-      "id": "GUEST_DETAILS", "title": "Guest details",
+      "id": "GUEST_DETAILS",
+      "title": "Guest details",
       "data": {
-        "property_id": { "type": "string", "__example__": "1" }, "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" }, "check_in": { "type": "string", "__example__": "2026-11-01" }, "check_out": { "type": "string", "__example__": "2026-11-03" },
-        "adults": { "type": "string", "__example__": "2" }, "children": { "type": "string", "__example__": "0" }, "infants": { "type": "string", "__example__": "0" }, "pets": { "type": "string", "__example__": "0" }, "error_message": { "type": "string", "__example__": "" }
+        "property_id": { "type": "string", "__example__": "1" },
+        "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" },
+        "check_in": { "type": "string", "__example__": "2026-11-01" },
+        "check_out": { "type": "string", "__example__": "2026-11-03" },
+        "adults": { "type": "number", "__example__": 2 },
+        "children": { "type": "number", "__example__": 0 },
+        "infants": { "type": "number", "__example__": 0 },
+        "pets": { "type": "number", "__example__": 0 },
+        "error_message": { "type": "string", "__example__": "" }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [{ "type": "Form", "name": "guest_details_form", "children": [
-        { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
-        { "type": "TextInput", "name": "guest_name", "label": "Full name", "input-type": "text", "required": true }, { "type": "TextInput", "name": "guest_email", "label": "Email", "input-type": "email", "required": true },
-        { "type": "TextInput", "name": "whatsapp_number", "label": "WhatsApp number with country code", "input-type": "phone", "required": true }, { "type": "TextArea", "name": "special_requests", "label": "Special requests", "required": false },
-        { "type": "Footer", "label": "Review enquiry", "on-click-action": { "name": "data_exchange", "payload": {
-          "property_id": "${data.property_id}", "check_in": "${data.check_in}", "check_out": "${data.check_out}", "adults": "${data.adults}", "children": "${data.children}", "infants": "${data.infants}", "pets": "${data.pets}",
-          "guest_name": "${form.guest_name}", "guest_email": "${form.guest_email}", "whatsapp_number": "${form.whatsapp_number}", "country_code": "IN", "special_requests": "${form.special_requests}"
-        } } }
-      ] }] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "guest_details_form",
+            "init-values": {
+              "country_code": "IN"
+            },
+            "children": [
+              { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+              { "type": "TextInput", "name": "guest_name", "label": "Full name", "input-type": "text", "required": true },
+              { "type": "TextInput", "name": "guest_email", "label": "Email", "input-type": "email", "required": true },
+              { "type": "TextInput", "name": "whatsapp_number", "label": "WhatsApp number with country code", "input-type": "phone", "required": true, "helper-text": "e.g. +91 98765 43210" },
+              { "type": "TextInput", "name": "country_code", "label": "Country code", "input-type": "text", "required": false, "helper-text": "2-letter ISO country code (default: IN)" },
+              { "type": "TextArea", "name": "special_requests", "label": "Special requests", "required": false },
+              {
+                "type": "Footer",
+                "label": "Review enquiry",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "property_id": "${data.property_id}",
+                    "check_in": "${data.check_in}",
+                    "check_out": "${data.check_out}",
+                    "adults": "${data.adults}",
+                    "children": "${data.children}",
+                    "infants": "${data.infants}",
+                    "pets": "${data.pets}",
+                    "guest_name": "${form.guest_name}",
+                    "guest_email": "${form.guest_email}",
+                    "whatsapp_number": "${form.whatsapp_number}",
+                    "country_code": "${form.country_code}",
+                    "special_requests": "${form.special_requests}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
     },
     {
-      "id": "BOOKING_REVIEW", "title": "Review enquiry",
+      "id": "BOOKING_REVIEW",
+      "title": "Review enquiry",
       "data": {
-        "property_id": { "type": "string", "__example__": "1" }, "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" }, "check_in": { "type": "string", "__example__": "2026-11-01" }, "check_out": { "type": "string", "__example__": "2026-11-03" },
-        "adults": { "type": "string", "__example__": "2" }, "children": { "type": "string", "__example__": "0" }, "infants": { "type": "string", "__example__": "0" }, "pets": { "type": "string", "__example__": "0" },
-        "guest_name": { "type": "string", "__example__": "Test Guest" }, "guest_email": { "type": "string", "__example__": "guest@example.com" }, "whatsapp_number": { "type": "string", "__example__": "+919876543210" }, "country_code": { "type": "string", "__example__": "IN" }, "special_requests": { "type": "string", "__example__": "" },
-        "quote": { "type": "object", "properties": { "currency": { "type": "string" }, "base_amount": { "type": "number" }, "extra_guest_amount": { "type": "number" }, "taxable_amount": { "type": "number" }, "gst_rate": { "type": "number" }, "gst_amount": { "type": "number" }, "total_amount": { "type": "number" } }, "__example__": { "currency": "INR", "base_amount": 19998, "extra_guest_amount": 0, "taxable_amount": 19998, "gst_rate": 18, "gst_amount": 3599.64, "total_amount": 23597.64 } },
-        "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" }, "error_message": { "type": "string", "__example__": "" }
+        "property_id": { "type": "string", "__example__": "1" },
+        "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" },
+        "check_in": { "type": "string", "__example__": "2026-11-01" },
+        "check_out": { "type": "string", "__example__": "2026-11-03" },
+        "adults": { "type": "number", "__example__": 2 },
+        "children": { "type": "number", "__example__": 0 },
+        "infants": { "type": "number", "__example__": 0 },
+        "pets": { "type": "number", "__example__": 0 },
+        "guest_name": { "type": "string", "__example__": "Test Guest" },
+        "guest_email": { "type": "string", "__example__": "guest@example.com" },
+        "whatsapp_number": { "type": "string", "__example__": "+919876543210" },
+        "country_code": { "type": "string", "__example__": "IN" },
+        "special_requests": { "type": "string", "__example__": "" },
+        "quote": {
+          "type": "object",
+          "properties": {
+            "nights": { "type": "number" },
+            "currency": { "type": "string" },
+            "base_amount": { "type": "number" },
+            "extra_guests": { "type": "number" },
+            "extra_guest_amount": { "type": "number" },
+            "original_amount": { "type": "number" },
+            "taxable_amount": { "type": "number" },
+            "gst_rate": { "type": "number" },
+            "cgst_amount": { "type": "number" },
+            "sgst_amount": { "type": "number" },
+            "gst_amount": { "type": "number" },
+            "total_amount": { "type": "number" }
+          },
+          "__example__": {
+            "currency": "INR",
+            "nights": 2,
+            "base_amount": 19998,
+            "extra_guests": 0,
+            "extra_guest_amount": 0,
+            "original_amount": 19998,
+            "taxable_amount": 19998,
+            "gst_rate": 18,
+            "cgst_amount": 1799.82,
+            "sgst_amount": 1799.82,
+            "gst_amount": 3599.64,
+            "total_amount": 23597.64
+          }
+        },
+        "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
+        "error_message": { "type": "string", "__example__": "" }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [
-        { "type": "TextHeading", "text": "${data.property_name}" }, { "type": "TextBody", "text": "${data.check_in} to ${data.check_out}\nAdults: ${data.adults} • Children: ${data.children} • Infants: ${data.infants} • Pets: ${data.pets}" },
-        { "type": "TextBody", "text": "Guest: ${data.guest_name}\nEmail: ${data.guest_email}\nWhatsApp: ${data.whatsapp_number}" },
-        { "type": "TextHeading", "text": "Total: ${data.quote.currency} ${data.quote.total_amount}" }, { "type": "TextBody", "text": "Includes GST of ${data.quote.currency} ${data.quote.gst_amount}." },
-        { "type": "TextCaption", "text": "Submitting creates a pending enquiry only. It does not confirm a reservation or payment." }, { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
-        { "type": "Footer", "label": "Create pending enquiry", "on-click-action": { "name": "data_exchange", "payload": {
-          "property_id": "${data.property_id}", "check_in": "${data.check_in}", "check_out": "${data.check_out}", "adults": "${data.adults}", "children": "${data.children}", "infants": "${data.infants}", "pets": "${data.pets}",
-          "guest_name": "${data.guest_name}", "guest_email": "${data.guest_email}", "whatsapp_number": "${data.whatsapp_number}", "country_code": "${data.country_code}", "special_requests": "${data.special_requests}"
-        } } }
-      ] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextHeading", "text": "${data.property_name}" },
+          { "type": "TextSubheading", "text": "Stay details" },
+          { "type": "TextBody", "text": "${data.check_in} to ${data.check_out}\nAdults: ${data.adults} • Children: ${data.children} • Infants: ${data.infants} • Pets: ${data.pets}" },
+          { "type": "TextSubheading", "text": "Guest contact" },
+          { "type": "TextBody", "text": "Name: ${data.guest_name}\nEmail: ${data.guest_email}\nWhatsApp: ${data.whatsapp_number}\nCountry code: ${data.country_code}" },
+          { "type": "TextBody", "text": "Special requests: ${data.special_requests}", "visible": "${data.special_requests != ''}" },
+          { "type": "TextSubheading", "text": "Quotation summary" },
+          { "type": "TextBody", "text": "Stay (${data.quote.nights} nights): ${data.quote.currency} ${data.quote.base_amount}\nExtra guests: ${data.quote.currency} ${data.quote.extra_guest_amount}\nTaxable amount: ${data.quote.currency} ${data.quote.taxable_amount}\nGST (${data.quote.gst_rate}%): ${data.quote.currency} ${data.quote.gst_amount} (CGST: ${data.quote.currency} ${data.quote.cgst_amount} + SGST: ${data.quote.currency} ${data.quote.sgst_amount})" },
+          { "type": "TextHeading", "text": "Total: ${data.quote.currency} ${data.quote.total_amount}" },
+          { "type": "TextCaption", "text": "Submitting creates a pending enquiry only. No payment is taken and no reservation is confirmed until approved." },
+          { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.error_message != ''}" },
+          {
+            "type": "Footer",
+            "label": "Confirm & create enquiry",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "property_id": "${data.property_id}",
+                "check_in": "${data.check_in}",
+                "check_out": "${data.check_out}",
+                "adults": "${data.adults}",
+                "children": "${data.children}",
+                "infants": "${data.infants}",
+                "pets": "${data.pets}",
+                "guest_name": "${data.guest_name}",
+                "guest_email": "${data.guest_email}",
+                "whatsapp_number": "${data.whatsapp_number}",
+                "country_code": "${data.country_code}",
+                "special_requests": "${data.special_requests}"
+              }
+            }
+          }
+        ]
+      }
     },
     {
-      "id": "ENQUIRY_CREATED", "title": "Enquiry created", "terminal": true, "success": true,
+      "id": "ENQUIRY_CREATED",
+      "title": "Enquiry created",
+      "terminal": true,
+      "success": true,
       "data": {
-        "enquiry_reference": { "type": "string", "__example__": "APP-42" }, "enquiry_status": { "type": "string", "__example__": "NEW" }, "payment_status": { "type": "string", "__example__": "NOT_STARTED" },
-        "continuation_type": { "type": "string", "__example__": "IDENTITY_DOCUMENT_UPLOAD" }, "continuation_url": { "type": "string", "__example__": "https://www.kezoistays.com/application" }, "replayed": { "type": "boolean", "__example__": false }, "message": { "type": "string", "__example__": "Enquiry created. No booking or payment has been confirmed." }
+        "enquiry_reference": { "type": "string", "__example__": "APP-42" },
+        "enquiry_status": { "type": "string", "__example__": "NEW" },
+        "payment_status": { "type": "string", "__example__": "NOT_STARTED" },
+        "continuation_type": { "type": "string", "__example__": "IDENTITY_DOCUMENT_UPLOAD" },
+        "continuation_url": { "type": "string", "__example__": "https://www.kezoistays.com/application" },
+        "replayed": { "type": "boolean", "__example__": false },
+        "message": { "type": "string", "__example__": "Enquiry created. No booking or payment has been confirmed." }
       },
-      "layout": { "type": "SingleColumnLayout", "children": [
-        { "type": "TextHeading", "text": "Enquiry ${data.enquiry_reference}" }, { "type": "TextBody", "text": "${data.message}" },
-        { "type": "TextBody", "text": "Status: ${data.enquiry_status}\nPayment: ${data.payment_status}" }, { "type": "EmbeddedLink", "text": "Upload identity document", "on-click-action": { "name": "open_url", "url": "${data.continuation_url}" } },
-        { "type": "Footer", "label": "Done", "on-click-action": { "name": "complete", "payload": { "enquiry_reference": "${data.enquiry_reference}", "enquiry_status": "${data.enquiry_status}", "payment_status": "${data.payment_status}" } } }
-      ] }
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextHeading", "text": "Enquiry ${data.enquiry_reference}" },
+          { "type": "TextBody", "text": "${data.message}" },
+          { "type": "TextBody", "text": "Enquiry status: ${data.enquiry_status}\nPayment status: ${data.payment_status}" },
+          {
+            "type": "EmbeddedLink",
+            "text": "Upload identity document",
+            "on-click-action": {
+              "name": "open_url",
+              "url": "${data.continuation_url}"
+            }
+          },
+          { "type": "TextCaption", "text": "Complete your identity verification using the secure link above. Our team will review your enquiry and contact you on WhatsApp." },
+          {
+            "type": "Footer",
+            "label": "Done",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "enquiry_reference": "${data.enquiry_reference}",
+                "enquiry_status": "${data.enquiry_status}",
+                "payment_status": "${data.payment_status}"
+              }
+            }
+          }
+        ]
+      }
     }
   ]
 }
