@@ -166,6 +166,7 @@
           ]
         },
         "no_properties_available": { "type": "boolean", "__example__": false },
+        "search_summary_text": { "type": "string", "__example__": "Live results for 2026-11-01 to 2026-11-03." },
         "has_error": { "type": "boolean", "__example__": false },
         "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
         "error_message": { "type": "string", "__example__": "" }
@@ -178,7 +179,7 @@
             "name": "property_selection_form",
             "children": [
               { "type": "TextHeading", "text": "Choose a property" },
-              { "type": "TextBody", "text": "Live results for ${data.check_in} to ${data.check_out}." },
+              { "type": "TextBody", "text": "${data.search_summary_text}" },
               { "type": "TextBody", "text": "No property is available for those dates and guests.", "visible": "${data.no_properties_available}" },
               { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               { "type": "RadioButtonsGroup", "name": "property_id", "label": "Properties", "data-source": "${data.properties}", "required": true },
@@ -338,6 +339,7 @@
         "check_in": { "type": "string", "__example__": "2026-11-01" },
         "check_out": { "type": "string", "__example__": "2026-11-03" },
         "max_guests": { "type": "number", "__example__": 10 },
+        "max_guests_text": { "type": "string", "__example__": "This property accommodates up to 6 guests." },
         "adults": { "type": "number", "__example__": 2 },
         "children": { "type": "number", "__example__": 0 },
         "infants": { "type": "number", "__example__": 0 },
@@ -358,7 +360,7 @@
               "pets": "${data.pets}"
             },
             "children": [
-              { "type": "TextBody", "text": "This property accommodates up to ${data.max_guests} guests." },
+              { "type": "TextBody", "text": "${data.max_guests_text}" },
               { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
               { "type": "TextInput", "name": "adults", "label": "Adults", "input-type": "number", "required": true, "helper-text": "Minimum 1 adult" },
               { "type": "TextInput", "name": "children", "label": "Children", "input-type": "number", "required": false, "helper-text": "Ages 2–12" },
@@ -408,6 +410,10 @@
         "sgst_amount": { "type": "number", "__example__": 1799.82 },
         "gst_amount": { "type": "number", "__example__": 3599.64 },
         "total_amount": { "type": "number", "__example__": 23597.64 },
+        "stay_dates_text": { "type": "string", "__example__": "Dates: 2026-11-01 to 2026-11-03 • 2 nights" },
+        "price_breakdown_text": { "type": "string", "__example__": "Stay (2 nights): INR 19998\nExtra guest charges: INR 0\nTaxable amount: INR 19998\nGST (18%): INR 3599.64\n  • CGST: INR 1799.82\n  • SGST: INR 1799.82" },
+        "total_amount_text": { "type": "string", "__example__": "Total: INR 23597.64" },
+        "quote_caption_text": { "type": "string", "__example__": "Live quote calculated on 2026-10-14T12:00:00.000Z. Availability and prices are verified again before enquiry creation." },
         "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
         "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
@@ -416,11 +422,11 @@
         "type": "SingleColumnLayout",
         "children": [
           { "type": "TextHeading", "text": "${data.property_name}" },
-          { "type": "TextBody", "text": "Dates: ${data.check_in} to ${data.check_out} • ${data.nights} nights" },
+          { "type": "TextBody", "text": "${data.stay_dates_text}" },
           { "type": "TextSubheading", "text": "Price Breakdown" },
-          { "type": "TextBody", "text": "Stay (${data.nights} nights): ${data.currency} ${data.base_amount}\nExtra guest charges: ${data.currency} ${data.extra_guest_amount}\nTaxable amount: ${data.currency} ${data.taxable_amount}\nGST (${data.gst_rate}%): ${data.currency} ${data.gst_amount}\n  • CGST: ${data.currency} ${data.cgst_amount}\n  • SGST: ${data.currency} ${data.sgst_amount}" },
-          { "type": "TextHeading", "text": "Total: ${data.currency} ${data.total_amount}" },
-          { "type": "TextCaption", "text": "Live quote calculated on ${data.quote_generated_at}. Availability and prices are verified again before enquiry creation." },
+          { "type": "TextBody", "text": "${data.price_breakdown_text}" },
+          { "type": "TextHeading", "text": "${data.total_amount_text}" },
+          { "type": "TextCaption", "text": "${data.quote_caption_text}" },
           { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
@@ -549,6 +555,11 @@
         },
         "quote_generated_at": { "type": "string", "__example__": "2026-10-14T12:00:00.000Z" },
         "has_special_requests": { "type": "boolean", "__example__": false },
+        "stay_details_text": { "type": "string", "__example__": "Dates: 2026-11-01 to 2026-11-03\nAdults: 2 • Children: 0 • Infants: 0 • Pets: 0" },
+        "guest_contact_text": { "type": "string", "__example__": "Name: Test Guest\nEmail: guest@example.com\nWhatsApp: +919876543210\nCountry code: IN" },
+        "special_requests_text": { "type": "string", "__example__": "Special requests: High floor" },
+        "quote_summary_text": { "type": "string", "__example__": "Stay (2 nights): INR 19998\nExtra guests: INR 0\nTaxable amount: INR 19998\nGST (18%): INR 3599.64 (CGST: INR 1799.82 + SGST: INR 1799.82)" },
+        "total_amount_text": { "type": "string", "__example__": "Total: INR 23597.64" },
         "has_error": { "type": "boolean", "__example__": false },
         "error_message": { "type": "string", "__example__": "" }
       },
@@ -557,13 +568,13 @@
         "children": [
           { "type": "TextHeading", "text": "${data.property_name}" },
           { "type": "TextSubheading", "text": "Stay details" },
-          { "type": "TextBody", "text": "Dates: ${data.check_in} to ${data.check_out}\nAdults: ${data.adults} • Children: ${data.children} • Infants: ${data.infants} • Pets: ${data.pets}" },
+          { "type": "TextBody", "text": "${data.stay_details_text}" },
           { "type": "TextSubheading", "text": "Guest contact" },
-          { "type": "TextBody", "text": "Name: ${data.guest_name}\nEmail: ${data.guest_email}\nWhatsApp: ${data.whatsapp_number}\nCountry code: ${data.country_code}" },
-          { "type": "TextBody", "text": "Special requests: ${data.special_requests}", "visible": "${data.has_special_requests}" },
+          { "type": "TextBody", "text": "${data.guest_contact_text}" },
+          { "type": "TextBody", "text": "${data.special_requests_text}", "visible": "${data.has_special_requests}" },
           { "type": "TextSubheading", "text": "Quotation summary" },
-          { "type": "TextBody", "text": "Stay (${data.quote.nights} nights): ${data.quote.currency} ${data.quote.base_amount}\nExtra guests: ${data.quote.currency} ${data.quote.extra_guest_amount}\nTaxable amount: ${data.quote.currency} ${data.quote.taxable_amount}\nGST (${data.quote.gst_rate}%): ${data.quote.currency} ${data.quote.gst_amount} (CGST: ${data.quote.currency} ${data.quote.cgst_amount} + SGST: ${data.quote.currency} ${data.quote.sgst_amount})" },
-          { "type": "TextHeading", "text": "Total: ${data.quote.currency} ${data.quote.total_amount}" },
+          { "type": "TextBody", "text": "${data.quote_summary_text}" },
+          { "type": "TextHeading", "text": "${data.total_amount_text}" },
           { "type": "TextCaption", "text": "Submitting creates a pending enquiry only. No payment is taken and no reservation is confirmed until approved." },
           { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
@@ -597,8 +608,10 @@
       "success": true,
       "data": {
         "enquiry_reference": { "type": "string", "__example__": "APP-42" },
+        "enquiry_reference_text": { "type": "string", "__example__": "Enquiry APP-42" },
         "enquiry_status": { "type": "string", "__example__": "NEW" },
         "payment_status": { "type": "string", "__example__": "NOT_STARTED" },
+        "enquiry_status_text": { "type": "string", "__example__": "Enquiry status: NEW\nPayment status: NOT_STARTED" },
         "continuation_type": { "type": "string", "__example__": "IDENTITY_DOCUMENT_UPLOAD" },
         "continuation_url": { "type": "string", "__example__": "https://www.kezoistays.com/application" },
         "replayed": { "type": "boolean", "__example__": false },
@@ -607,9 +620,9 @@
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
-          { "type": "TextHeading", "text": "Enquiry ${data.enquiry_reference}" },
+          { "type": "TextHeading", "text": "${data.enquiry_reference_text}" },
           { "type": "TextBody", "text": "${data.message}" },
-          { "type": "TextBody", "text": "Enquiry status: ${data.enquiry_status}\nPayment status: ${data.payment_status}" },
+          { "type": "TextBody", "text": "${data.enquiry_status_text}" },
           {
             "type": "EmbeddedLink",
             "text": "Upload identity document",

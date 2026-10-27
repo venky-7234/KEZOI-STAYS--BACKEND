@@ -24,14 +24,14 @@ const SCREEN_DATA_FIELDS = Object.freeze({
   [SCREENS.VIEW_ENTRY]: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
   [SCREENS.RESERVE_ENTRY]: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
   [SCREENS.START]: ['has_error', 'error_message'],
-  [SCREENS.PROPERTIES]: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'quote_generated_at', 'has_error', 'error_message'],
+  [SCREENS.PROPERTIES]: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'search_summary_text', 'quote_generated_at', 'has_error', 'error_message'],
   [SCREENS.DETAILS]: ['property_id', 'property_name', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
   [SCREENS.CALENDAR]: ['property_id', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'unavailable_dates', 'calendar_refreshed_at', 'has_error', 'error_message'],
-  [SCREENS.GUESTS]: ['property_id', 'check_in', 'check_out', 'max_guests', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
-  [SCREENS.QUOTE]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'quote_generated_at', 'has_error'],
+  [SCREENS.GUESTS]: ['property_id', 'check_in', 'check_out', 'max_guests', 'max_guests_text', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  [SCREENS.QUOTE]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'stay_dates_text', 'price_breakdown_text', 'total_amount_text', 'quote_caption_text', 'quote_generated_at', 'has_error', 'error_message'],
   [SCREENS.GUEST_DETAILS]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
-  [SCREENS.REVIEW]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'has_special_requests', 'quote', 'quote_generated_at', 'has_error', 'error_message'],
-  [SCREENS.COMPLETE]: ['enquiry_reference', 'enquiry_status', 'payment_status', 'continuation_type', 'continuation_url', 'replayed', 'message']
+  [SCREENS.REVIEW]: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'has_special_requests', 'stay_details_text', 'guest_contact_text', 'special_requests_text', 'quote_summary_text', 'total_amount_text', 'quote', 'quote_generated_at', 'has_error', 'error_message'],
+  [SCREENS.COMPLETE]: ['enquiry_reference', 'enquiry_reference_text', 'enquiry_status', 'payment_status', 'enquiry_status_text', 'continuation_type', 'continuation_url', 'replayed', 'message']
 });
 const screenResponse = (screen, data) => {
   const allowed = SCREEN_DATA_FIELDS[screen] || [];
@@ -214,6 +214,7 @@ const handleFlowAction = async (db, payload) => {
       children: data.children,
       infants: data.infants,
       pets: data.pets,
+      search_summary_text: `Live results for ${result.stay.check_in} to ${result.stay.check_out}.`,
       properties: result.properties.map(p => ({ id: String(p.id), title: p.property_name, description: `${p.bedrooms || 0} bedrooms | ${p.bathrooms || 0} bathrooms | ${p.quote.currency} ${p.quote.total_amount}` })),
       no_properties_available: !result.properties.length,
       quote_generated_at: new Date().toISOString()
@@ -234,12 +235,50 @@ const handleFlowAction = async (db, payload) => {
     if (blocked.some(date => selected.has(date))) return errorResponse(SCREENS.CALENDAR, 'One or more selected dates are no longer available', { ...data, unavailable_dates: blocked });
     const property = await propertyDetails(db, data.property_id, data.property_code);
     if (!property) return errorResponse(SCREENS.CALENDAR, 'Property not found or inactive', { ...data, unavailable_dates: blocked });
-    return screenResponse(SCREENS.GUESTS, { ...data, check_in: parsed.check_in, check_out: parsed.check_out, max_guests: Number(property?.max_guests || 0) });
+    const maxGuestsNum = Number(property?.max_guests || 0);
+    return screenResponse(SCREENS.GUESTS, { ...data, check_in: parsed.check_in, check_out: parsed.check_out, max_guests: maxGuestsNum, max_guests_text: `This property accommodates up to ${maxGuestsNum} guests.` });
   }
   if (payload.screen === SCREENS.GUESTS) {
     const priced = await selectedQuote(db, data); if (priced.error) return errorResponse(SCREENS.GUESTS, priced.error, data);
     const q = priced.property.quote;
-    return screenResponse(SCREENS.QUOTE, { ...data, property_name: priced.property.property_name, check_in: priced.stay.check_in, check_out: priced.stay.check_out, nights: q.nights, currency: q.currency, base_amount: money(q.base_amount), extra_guests: q.extra_guests, extra_guest_amount: money(q.extra_guest_amount), taxable_amount: money(q.taxable_amount), gst_rate: q.gst_rate, cgst_amount: money(q.cgst_amount), sgst_amount: money(q.sgst_amount), gst_amount: money(q.gst_amount), total_amount: money(q.total_amount), quote_generated_at: new Date().toISOString() });
+    const nights = q.nights;
+    const currency = q.currency;
+    const baseAmount = money(q.base_amount);
+    const extraGuestAmount = money(q.extra_guest_amount);
+    const taxableAmount = money(q.taxable_amount);
+    const gstRate = q.gst_rate;
+    const cgstAmount = money(q.cgst_amount);
+    const sgstAmount = money(q.sgst_amount);
+    const gstAmount = money(q.gst_amount);
+    const totalAmount = money(q.total_amount);
+    const nowIso = new Date().toISOString();
+    const stayDatesText = `Dates: ${priced.stay.check_in} to ${priced.stay.check_out} • ${nights} nights`;
+    const priceBreakdownText = `Stay (${nights} nights): ${currency} ${baseAmount}\nExtra guest charges: ${currency} ${extraGuestAmount}\nTaxable amount: ${currency} ${taxableAmount}\nGST (${gstRate}%): ${currency} ${gstAmount}\n  • CGST: ${currency} ${cgstAmount}\n  • SGST: ${currency} ${sgstAmount}`;
+    const totalAmountText = `Total: ${currency} ${totalAmount}`;
+    const quoteCaptionText = `Live quote calculated on ${nowIso}. Availability and prices are verified again before enquiry creation.`;
+    return screenResponse(SCREENS.QUOTE, {
+      ...data,
+      property_name: priced.property.property_name,
+      check_in: priced.stay.check_in,
+      check_out: priced.stay.check_out,
+      nights,
+      currency,
+      base_amount: baseAmount,
+      extra_guests: q.extra_guests,
+      extra_guest_amount: extraGuestAmount,
+      taxable_amount: taxableAmount,
+      gst_rate: gstRate,
+      cgst_amount: cgstAmount,
+      sgst_amount: sgstAmount,
+      gst_amount: gstAmount,
+      total_amount: totalAmount,
+      stay_dates_text: stayDatesText,
+      price_breakdown_text: priceBreakdownText,
+      total_amount_text: totalAmountText,
+      quote_caption_text: quoteCaptionText,
+      quote_generated_at: nowIso,
+      has_error: false
+    });
   }
   if (payload.screen === SCREENS.QUOTE) return screenResponse(SCREENS.GUEST_DETAILS, data);
   if (payload.screen === SCREENS.GUEST_DETAILS) {
@@ -248,11 +287,44 @@ const handleFlowAction = async (db, payload) => {
     if (!String(data.guest_name || '').trim()) return errorResponse(SCREENS.GUEST_DETAILS, 'Guest name is required', data);
     if (!phone.valid || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(data.guest_email || '').trim())) return errorResponse(SCREENS.GUEST_DETAILS, 'Enter a valid email address and WhatsApp number', data);
     const hasSpecialRequests = Boolean(String(data.special_requests || '').trim());
-    return screenResponse(SCREENS.REVIEW, { ...data, check_in: priced.stay.check_in, check_out: priced.stay.check_out, whatsapp_number: phone.normalizedNumber, property_name: priced.property.property_name, quote: priced.property.quote, has_special_requests: hasSpecialRequests, has_error: false, quote_generated_at: new Date().toISOString() });
+    const q = priced.property.quote;
+    const nowIso = new Date().toISOString();
+    const stayDetailsText = `Dates: ${priced.stay.check_in} to ${priced.stay.check_out}\nAdults: ${data.adults} • Children: ${data.children || 0} • Infants: ${data.infants || 0} • Pets: ${data.pets || 0}`;
+    const guestContactText = `Name: ${String(data.guest_name).trim()}\nEmail: ${String(data.guest_email).trim()}\nWhatsApp: ${phone.normalizedNumber}\nCountry code: ${data.country_code || 'IN'}`;
+    const specialRequestsText = `Special requests: ${String(data.special_requests || '').trim()}`;
+    const quoteSummaryText = `Stay (${q.nights} nights): ${q.currency} ${money(q.base_amount)}\nExtra guests: ${q.currency} ${money(q.extra_guest_amount)}\nTaxable amount: ${q.currency} ${money(q.taxable_amount)}\nGST (${q.gst_rate}%): ${q.currency} ${money(q.gst_amount)} (CGST: ${q.currency} ${money(q.cgst_amount)} + SGST: ${q.currency} ${money(q.sgst_amount)})`;
+    const totalAmountText = `Total: ${q.currency} ${money(q.total_amount)}`;
+    return screenResponse(SCREENS.REVIEW, {
+      ...data,
+      check_in: priced.stay.check_in,
+      check_out: priced.stay.check_out,
+      whatsapp_number: phone.normalizedNumber,
+      property_name: priced.property.property_name,
+      quote: priced.property.quote,
+      stay_details_text: stayDetailsText,
+      guest_contact_text: guestContactText,
+      special_requests_text: specialRequestsText,
+      quote_summary_text: quoteSummaryText,
+      total_amount_text: totalAmountText,
+      has_special_requests: hasSpecialRequests,
+      has_error: false,
+      quote_generated_at: nowIso
+    });
   }
   if (payload.screen === SCREENS.REVIEW) {
     const result = await createPendingEnquiry(db, { ...data, flow_token: payload.flow_token || data.flow_token }); if (result.error) return errorResponse(SCREENS.REVIEW, result.error, data);
-    return screenResponse(SCREENS.COMPLETE, { enquiry_reference: `APP-${result.enquiry.id}`, enquiry_status: result.enquiry.status, payment_status: 'NOT_STARTED', continuation_type: 'IDENTITY_DOCUMENT_UPLOAD', continuation_url: continuation(result.enquiry), replayed: result.replayed, message: 'Enquiry created. No booking or payment has been confirmed.' });
+    const ref = `APP-${result.enquiry.id}`;
+    return screenResponse(SCREENS.COMPLETE, {
+      enquiry_reference: ref,
+      enquiry_reference_text: `Enquiry ${ref}`,
+      enquiry_status: result.enquiry.status,
+      payment_status: 'NOT_STARTED',
+      enquiry_status_text: `Enquiry status: ${result.enquiry.status}\nPayment status: NOT_STARTED`,
+      continuation_type: 'IDENTITY_DOCUMENT_UPLOAD',
+      continuation_url: continuation(result.enquiry),
+      replayed: result.replayed,
+      message: 'Enquiry created. No booking or payment has been confirmed.'
+    });
   }
   return errorResponse(payload.screen || SCREENS.START, 'Unsupported Flow screen', data);
 };

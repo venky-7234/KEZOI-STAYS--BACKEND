@@ -119,14 +119,14 @@ const SCREEN_DATA_FIELDS = {
   VIEW_STAY_ENTRY: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
   RESERVE_ENTRY: ['property_id', 'property_code', 'entry_intent', 'has_error', 'error_message'],
   BOOKING_DETAILS: ['has_error', 'error_message'],
-  PROPERTY_SELECTION: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'quote_generated_at', 'has_error', 'error_message'],
+  PROPERTY_SELECTION: ['check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'properties', 'no_properties_available', 'search_summary_text', 'quote_generated_at', 'has_error', 'error_message'],
   PROPERTY_DETAILS: ['property_id', 'property_name', 'property_description', 'property_location', 'amenities', 'amenities_text', 'max_guests', 'gallery', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
   CALENDAR: ['property_id', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'unavailable_dates', 'calendar_refreshed_at', 'has_error', 'error_message'],
-  GUEST_SELECTION: ['property_id', 'check_in', 'check_out', 'max_guests', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
-  LIVE_QUOTE: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'quote_generated_at', 'has_error'],
+  GUEST_SELECTION: ['property_id', 'check_in', 'check_out', 'max_guests', 'max_guests_text', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
+  LIVE_QUOTE: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'nights', 'currency', 'base_amount', 'extra_guests', 'extra_guest_amount', 'taxable_amount', 'gst_rate', 'cgst_amount', 'sgst_amount', 'gst_amount', 'total_amount', 'stay_dates_text', 'price_breakdown_text', 'total_amount_text', 'quote_caption_text', 'quote_generated_at', 'has_error', 'error_message'],
   GUEST_DETAILS: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'has_error', 'error_message'],
-  BOOKING_REVIEW: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'has_special_requests', 'quote', 'quote_generated_at', 'has_error', 'error_message'],
-  ENQUIRY_CREATED: ['enquiry_reference', 'enquiry_status', 'payment_status', 'continuation_type', 'continuation_url', 'replayed', 'message']
+  BOOKING_REVIEW: ['property_id', 'property_name', 'check_in', 'check_out', 'adults', 'children', 'infants', 'pets', 'guest_name', 'guest_email', 'whatsapp_number', 'country_code', 'special_requests', 'has_special_requests', 'stay_details_text', 'guest_contact_text', 'special_requests_text', 'quote_summary_text', 'total_amount_text', 'quote', 'quote_generated_at', 'has_error', 'error_message'],
+  ENQUIRY_CREATED: ['enquiry_reference', 'enquiry_reference_text', 'enquiry_status', 'payment_status', 'enquiry_status_text', 'continuation_type', 'continuation_url', 'replayed', 'message']
 };
 
 for (const [screenId, fields] of Object.entries(SCREEN_DATA_FIELDS)) {

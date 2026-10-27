@@ -389,4 +389,49 @@ test('handles duplicate final submissions idempotently and detects tamper attemp
   delete process.env.WEBSITE_APPLICATION_URL;
 });
 
+test('LIVE_QUOTE response provides all declared quote fields and formatted display strings without raw placeholders', async () => {
+  const db = fakeDb();
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'GUEST_SELECTION',
+    data: base
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'LIVE_QUOTE');
+  assert.equal(typeof response.data.property_name, 'string');
+  assert.equal(typeof response.data.stay_dates_text, 'string');
+  assert.equal(typeof response.data.price_breakdown_text, 'string');
+  assert.equal(typeof response.data.total_amount_text, 'string');
+  assert.equal(typeof response.data.quote_caption_text, 'string');
+
+  // Verify none of the formatted display strings leak raw template interpolation placeholders
+  for (const text of [
+    response.data.stay_dates_text,
+    response.data.price_breakdown_text,
+    response.data.total_amount_text,
+    response.data.quote_caption_text
+  ]) {
+    assert.ok(!text.includes('${'), `Formatted display string contains raw placeholder: ${text}`);
+  }
+
+  // Verify actual values are rendered
+  assert.ok(response.data.stay_dates_text.includes('2026-11-01 to 2026-11-03 • 2 nights'));
+  assert.ok(response.data.price_breakdown_text.includes('Stay (2 nights): INR 20000'));
+  assert.ok(response.data.price_breakdown_text.includes('GST (18%): INR 3600'));
+  assert.ok(response.data.total_amount_text.includes('Total: INR 23600'));
+  assert.ok(response.data.quote_caption_text.includes('Live quote calculated on'));
+
+  // Verify raw numbers remain intact for downstream calculation and payload forwarding
+  assert.equal(response.data.nights, 2);
+  assert.equal(response.data.currency, 'INR');
+  assert.equal(response.data.base_amount, 20000);
+  assert.equal(response.data.extra_guests, 0);
+  assert.equal(response.data.extra_guest_amount, 0);
+  assert.equal(response.data.taxable_amount, 20000);
+  assert.equal(response.data.gst_rate, 18);
+  assert.equal(response.data.gst_amount, 3600);
+  assert.equal(response.data.total_amount, 23600);
+});
+
 
