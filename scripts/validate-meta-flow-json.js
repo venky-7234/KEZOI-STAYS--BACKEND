@@ -52,8 +52,41 @@ assert.ok(routing, 'routing_model must be defined');
 
 for (const screen of flow.screens) {
   assert.ok(Array.isArray(routing[screen.id]), `routing_model missing entry for screen: ${screen.id}`);
+  assert.ok(!routing[screen.id].includes(screen.id), `Loop detected: screen ${screen.id} routes to itself in routing_model`);
   for (const target of routing[screen.id]) {
     assert.ok(screenMap.has(target), `routing_model target screen '${target}' from '${screen.id}' does not exist`);
+  }
+}
+
+// In-degree & entry screen validation
+const inDegree = new Map(flow.screens.map(s => [s.id, 0]));
+for (const screen of flow.screens) {
+  for (const target of routing[screen.id]) {
+    inDegree.set(target, (inDegree.get(target) || 0) + 1);
+  }
+}
+const entryScreens = flow.screens.filter(s => inDegree.get(s.id) === 0);
+assert.ok(entryScreens.length > 0, 'No entry screen found in the routing model. Expected at least one screen with no inbound edges.');
+
+// Cycle detection via DFS
+const visited = new Set();
+const recursionStack = new Set();
+function hasCycle(node) {
+  visited.add(node);
+  recursionStack.add(node);
+  for (const neighbor of (routing[node] || [])) {
+    if (!visited.has(neighbor)) {
+      if (hasCycle(neighbor)) return true;
+    } else if (recursionStack.has(neighbor)) {
+      return true;
+    }
+  }
+  recursionStack.delete(node);
+  return false;
+}
+for (const screen of flow.screens) {
+  if (!visited.has(screen.id)) {
+    assert.ok(!hasCycle(screen.id), `Cycle detected in routing_model starting at ${screen.id}`);
   }
 }
 
@@ -61,7 +94,7 @@ for (const screen of flow.screens) {
 assert.deepEqual(routing.ENQUIRY_CREATED, [], 'ENQUIRY_CREATED must be terminal (empty routing target)');
 assert.equal(screenMap.get('ENQUIRY_CREATED').terminal, true, 'ENQUIRY_CREATED must have terminal: true');
 assert.equal(screenMap.get('ENQUIRY_CREATED').success, true, 'ENQUIRY_CREATED must have success: true');
-console.log('✔ 4. routing_model edges and terminal state verified');
+console.log(`✔ 4. routing_model DAG verified: ${entryScreens.map(s => s.id).join(', ')} (in-degree 0), no loops/cycles, terminal state verified`);
 
 // 5. Data Field Declarations and Examples
 const validDataTypes = new Set(['string', 'number', 'boolean', 'array', 'object']);
@@ -131,6 +164,17 @@ function validateComponent(comp, screen, formComponents = new Set()) {
     } else {
       assert.fail(`Component ${comp.type} in ${screen.id} has invalid visible type: ${typeof comp.visible}`);
     }
+  }
+
+  // Validate text dynamic data format according to Meta Flow Schema
+  if (comp.text && typeof comp.text === 'string' && comp.text.startsWith('${') && comp.text.endsWith('}')) {
+    assert.ok(
+      /^\$\{(data|screen\.data)\.[a-zA-Z0-9_.]+\}$/.test(comp.text),
+      `Component ${comp.type} in ${screen.id} has invalid text expression '${comp.text}'. When text starts with '\${' and ends with '}', it must be an exact single property reference, not multi-value interpolation.`
+    );
+    const varPath = comp.text.slice(2, -1).trim().replace(/^(data|screen\.data)\./, '');
+    const rootField = varPath.split('.')[0];
+    assert.ok(screen.data[rootField], `Component ${comp.type} in ${screen.id} text references undeclared data field '${rootField}'`);
   }
 
   if (comp.children) {
