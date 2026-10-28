@@ -149,6 +149,7 @@ function validateComponent(comp, screen, formComponents = new Set()) {
 
   // Validate visible property according to Meta Flow Schema
   if (comp.visible !== undefined) {
+    assert.notEqual(comp.type, 'Footer', `Property 'visible' is not allowed in 'Footer' component (${screen.id})`);
     if (typeof comp.visible === 'boolean') {
       // Literal boolean is valid
     } else if (typeof comp.visible === 'string' && comp.visible.startsWith('${') && comp.visible.endsWith('}')) {

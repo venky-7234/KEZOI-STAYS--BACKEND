@@ -187,7 +187,6 @@
               {
                 "type": "Footer",
                 "label": "View stay",
-                "visible": "${data.has_available_properties}",
                 "on-click-action": {
                   "name": "data_exchange",
                   "payload": {
