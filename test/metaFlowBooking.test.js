@@ -1133,6 +1133,72 @@ test('INVALID PHOTOS: invalid or empty base64 entries filtered out without break
   assert.equal(response.data.gallery[0].src, 'valid_b64_data');
 });
 
+test('NULL DESCRIPTION: property with public_description = null falls back to generated description and conforms to draft schema', async () => {
+  const propNoDesc = {
+    ...property,
+    id: 6,
+    property_code: 'TG-0006',
+    property_name: 'Kezoi Penthouse Serene',
+    public_description: null,
+    public_location: null,
+    bedrooms: 2,
+    property_type: 'penthouse',
+    area: 'Jubilee Hills',
+    city: 'Hyderabad'
+  };
+  const db = {
+    query: async (sql) => {
+      if (/FROM properties WHERE id=/.test(sql)) return { rows: [propNoDesc] };
+      if (/FROM property_marketing_photos WHERE/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_SELECTION',
+    data: { property_id: '6' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_DETAILS');
+  assert.equal(response.data.property_id, '6');
+  assert.match(response.data.property_description, /Kezoi Penthouse Serene is a luxury 2 bedroom penthouse situated in Jubilee Hills/);
+  assert.equal(response.data.has_gallery, false);
+  assert.deepEqual(response.data.gallery, []);
+});
+
+test('ZERO PHOTOS: property with zero marketing photos sets has_gallery=false and empty gallery without throwing', async () => {
+  const propNoPhotos = {
+    ...property,
+    id: 7,
+    property_code: 'TG-0007',
+    property_name: 'Kezoi Minimalist Studio',
+    public_description: 'A cozy studio in Hitech City.',
+    public_location: 'Hitech City, Hyderabad'
+  };
+  const db = {
+    query: async (sql) => {
+      if (/FROM properties WHERE id=/.test(sql)) return { rows: [propNoPhotos] };
+      if (/FROM property_marketing_photos WHERE/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_SELECTION',
+    data: { property_id: '7' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_DETAILS');
+  assert.equal(response.data.property_id, '7');
+  assert.equal(response.data.property_description, 'A cozy studio in Hitech City.');
+  assert.equal(response.data.has_gallery, false);
+  assert.deepEqual(response.data.gallery, []);
+});
+
 test('COMPLETE JOURNEY 1: VIEW_STAY_ENTRY -> Catalogue -> Details -> Calendar -> Guests -> Quote -> Review -> Enquiry', async () => {
   process.env.JWT_SECRET = 'journey-secret-signing';
   process.env.WEBSITE_APPLICATION_URL = 'https://guest.kezoistays.test/upload';
