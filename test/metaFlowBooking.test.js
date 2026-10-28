@@ -956,5 +956,441 @@ test('EXACT DASHBOARD PRICING PARITY: createPendingEnquiry persists exact discou
   delete process.env.WEBSITE_APPLICATION_URL;
 });
 
+test('VIEW_STAY_ENTRY without preselected property navigates to PROPERTY_SELECTION catalogue', async () => {
+  const prop1 = { ...property, id: 1, property_code: 'TG-0001', property_name: 'Kezoi Villa Manikonda', area: 'Manikonda', bedrooms: 3, bathrooms: 3, max_guests: 8, base_price: 10000 };
+  const prop2 = { ...property, id: 2, property_code: 'TG-0002', property_name: 'Kezoi Penthouse Gachibowli', area: 'Gachibowli', bedrooms: 4, bathrooms: 4, max_guests: 12, base_price: 16000 };
+
+  const db = {
+    query: async (sql) => {
+      if (/FROM properties p/.test(sql)) return { rows: [prop1, prop2] };
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'VIEW_STAY_ENTRY',
+    data: { entry_intent: 'view_stay' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_SELECTION');
+  assert.equal(response.data.has_available_properties, true);
+  assert.equal(response.data.no_properties_available, false);
+  assert.equal(response.data.properties.length, 2);
+  assert.equal(response.data.properties[0].id, '1');
+  assert.equal(response.data.properties[0].title, 'Kezoi Villa Manikonda');
+  assert.match(response.data.properties[0].description, /Manikonda \| 3 bedrooms • 3 bathrooms • Up to 8 guests \| From INR 10000\/night/);
+  assert.equal(response.data.properties[1].id, '2');
+  assert.equal(response.data.properties[1].title, 'Kezoi Penthouse Gachibowli');
+  assert.match(response.data.properties[1].description, /Gachibowli \| 4 bedrooms • 4 bathrooms • Up to 12 guests \| From INR 16000\/night/);
+});
+
+test('RESERVE_ENTRY without preselected property navigates to BOOKING_DETAILS to pick dates and guests', async () => {
+  const db = fakeDb();
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'RESERVE_ENTRY',
+    data: { entry_intent: 'reserve' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'BOOKING_DETAILS');
+});
+
+test('DYNAMIC ADDITION: new dashboard property appears in catalogue without Flow JSON modification', async () => {
+  const prop1 = { ...property, id: 1, property_code: 'TG-0001', property_name: 'Kezoi Villa Manikonda', area: 'Manikonda', base_price: 10000 };
+  const prop2 = { ...property, id: 2, property_code: 'TG-0002', property_name: 'Kezoi Penthouse Gachibowli', area: 'Gachibowli', base_price: 16000 };
+  const prop3 = { ...property, id: 3, property_code: 'TG-0003', property_name: 'Kezoi Estate Jubilee Hills', area: 'Jubilee Hills', bedrooms: 5, bathrooms: 5, max_guests: 16, base_price: 25000 };
+
+  const db = {
+    query: async (sql) => {
+      if (/FROM properties p/.test(sql)) return { rows: [prop1, prop2, prop3] };
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'VIEW_STAY_ENTRY',
+    data: { entry_intent: 'view_stay' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_SELECTION');
+  assert.equal(response.data.properties.length, 3);
+  assert.equal(response.data.properties[2].id, '3');
+  assert.equal(response.data.properties[2].title, 'Kezoi Estate Jubilee Hills');
+  assert.match(response.data.properties[2].description, /Jubilee Hills \| 5 bedrooms • 5 bathrooms • Up to 16 guests \| From INR 25000\/night/);
+});
+
+test('PHOTO ISOLATION: property-specific photos strictly mapped and never leaked between properties', async () => {
+  const prop1 = { ...property, id: 1, property_code: 'TG-0001', property_name: 'Kezoi Villa Manikonda' };
+  const prop2 = { ...property, id: 2, property_code: 'TG-0002', property_name: 'Kezoi Penthouse Gachibowli' };
+
+  const prop1Photos = [
+    { id: 10, property_id: 1, alt_text: 'Villa Living Room', meta_image_base64: 'b64_villa_living', display_order: 0, is_cover: true }
+  ];
+  const prop2Photos = [
+    { id: 20, property_id: 2, alt_text: 'Penthouse Skyline View', meta_image_base64: 'b64_penthouse_skyline', display_order: 0, is_cover: true },
+    { id: 21, property_id: 2, alt_text: 'Penthouse Master Suite', meta_image_base64: 'b64_penthouse_suite', display_order: 1, is_cover: false }
+  ];
+
+  const db = {
+    query: async (sql, params = []) => {
+      if (/FROM properties WHERE id=\$1/.test(sql)) {
+        return { rows: params[0] === '1' ? [prop1] : params[0] === '2' ? [prop2] : [] };
+      }
+      if (/FROM property_marketing_photos WHERE property_id=\$1/.test(sql)) {
+        return { rows: params[0] === 1 ? prop1Photos : params[0] === 2 ? prop2Photos : [] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const res1 = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_SELECTION',
+    data: { property_id: '1' }
+  });
+  assertResponseMatchesDraft(res1);
+  assert.equal(res1.screen, 'PROPERTY_DETAILS');
+  assert.equal(res1.data.property_id, '1');
+  assert.equal(res1.data.property_name, 'Kezoi Villa Manikonda');
+  assert.equal(res1.data.has_gallery, true);
+  assert.equal(res1.data.gallery.length, 1);
+  assert.equal(res1.data.gallery[0].src, 'b64_villa_living');
+  assert.equal(res1.data.gallery[0]['alt-text'], 'Villa Living Room');
+
+  const res2 = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_SELECTION',
+    data: { property_id: '2' }
+  });
+  assertResponseMatchesDraft(res2);
+  assert.equal(res2.screen, 'PROPERTY_DETAILS');
+  assert.equal(res2.data.property_id, '2');
+  assert.equal(res2.data.property_name, 'Kezoi Penthouse Gachibowli');
+  assert.equal(res2.data.has_gallery, true);
+  assert.equal(res2.data.gallery.length, 2);
+  assert.equal(res2.data.gallery[0].src, 'b64_penthouse_skyline');
+  assert.equal(res2.data.gallery[1].src, 'b64_penthouse_suite');
+
+  // Verify non-leakage
+  assert.equal(res1.data.gallery.some(img => img.src.includes('penthouse')), false);
+  assert.equal(res2.data.gallery.some(img => img.src.includes('villa')), false);
+});
+
+test('EMPTY CATALOGUE: handles zero active properties gracefully', async () => {
+  const db = {
+    query: async (sql) => {
+      if (/FROM properties p/.test(sql)) return { rows: [] };
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'VIEW_STAY_ENTRY',
+    data: { entry_intent: 'view_stay' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_SELECTION');
+  assert.equal(response.data.properties.length, 0);
+  assert.equal(response.data.has_available_properties, false);
+  assert.equal(response.data.no_properties_available, true);
+});
+
+test('INVALID PHOTOS: invalid or empty base64 entries filtered out without breaking gallery contract', async () => {
+  const propWithBrokenPhoto = { ...property, id: 5, property_code: 'TG-0005', property_name: 'Kezoi Cottage' };
+  const db = {
+    query: async (sql) => {
+      if (/FROM properties WHERE id=/.test(sql)) return { rows: [propWithBrokenPhoto] };
+      if (/FROM property_marketing_photos WHERE/.test(sql)) {
+        return {
+          rows: [
+            { id: 1, meta_image_base64: null, alt_text: 'Null photo' },
+            { id: 2, meta_image_base64: '   ', alt_text: 'Whitespace photo' },
+            { id: 3, meta_image_base64: 'valid_b64_data', alt_text: 'Valid Photo' }
+          ]
+        };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const response = await handleFlowAction(db, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_SELECTION',
+    data: { property_id: '5' }
+  });
+
+  assertResponseMatchesDraft(response);
+  assert.equal(response.screen, 'PROPERTY_DETAILS');
+  assert.equal(response.data.has_gallery, true);
+  assert.equal(response.data.gallery.length, 1);
+  assert.equal(response.data.gallery[0].src, 'valid_b64_data');
+});
+
+test('COMPLETE JOURNEY 1: VIEW_STAY_ENTRY -> Catalogue -> Details -> Calendar -> Guests -> Quote -> Review -> Enquiry', async () => {
+  process.env.JWT_SECRET = 'journey-secret-signing';
+  process.env.WEBSITE_APPLICATION_URL = 'https://guest.kezoistays.test/upload';
+
+  let capturedEnquiry;
+  const journeyDb = {
+    query: async (sql, params = []) => {
+      if (/FROM properties p/.test(sql)) return { rows: [{ ...property, id: 2, property_name: 'Penthouse' }] };
+      if (/FROM properties WHERE id=/.test(sql)) return { rows: [{ ...property, id: 2, property_name: 'Penthouse' }] };
+      if (/FROM property_marketing_photos WHERE/.test(sql)) return { rows: [{ id: 50, meta_image_base64: 'b64_penthouse', alt_text: 'Penthouse' }] };
+      if (/SELECT start_date, end_date FROM/.test(sql)) return { rows: [] };
+      if (/integration_idempotency_key=/.test(sql)) return { rows: [] };
+      if (/SELECT \* FROM guests/.test(sql)) return { rows: [{ id: 15 }] };
+      if (/INSERT INTO enquiries/.test(sql)) {
+        capturedEnquiry = { id: 99, guest_id: 15, property_id: params[1], status: 'NEW' };
+        return { rows: [capturedEnquiry] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  // 1. VIEW_STAY_ENTRY -> PROPERTY_SELECTION
+  let res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'VIEW_STAY_ENTRY',
+    data: { entry_intent: 'view_stay' }
+  });
+  assert.equal(res.screen, 'PROPERTY_SELECTION');
+  assertResponseMatchesDraft(res);
+
+  // 2. PROPERTY_SELECTION -> PROPERTY_DETAILS (select property 2)
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_SELECTION',
+    data: { property_id: '2' }
+  });
+  assert.equal(res.screen, 'PROPERTY_DETAILS');
+  assert.equal(res.data.property_id, '2');
+  assertResponseMatchesDraft(res);
+
+  // 3. PROPERTY_DETAILS -> CALENDAR
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_DETAILS',
+    data: { property_id: '2' }
+  });
+  assert.equal(res.screen, 'CALENDAR');
+  assert.equal(res.data.property_id, '2');
+  assertResponseMatchesDraft(res);
+
+  // 4. CALENDAR -> GUEST_SELECTION (select dates)
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'CALENDAR',
+    data: { property_id: '2', check_in: '2026-12-01', check_out: '2026-12-03' }
+  });
+  assert.equal(res.screen, 'GUEST_SELECTION');
+  assert.equal(res.data.property_id, '2');
+  assertResponseMatchesDraft(res);
+
+  // 5. GUEST_SELECTION -> LIVE_QUOTE (select guests)
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'GUEST_SELECTION',
+    data: { property_id: '2', check_in: '2026-12-01', check_out: '2026-12-03', adults: 2, children: 0, infants: 0, pets: 0 }
+  });
+  assert.equal(res.screen, 'LIVE_QUOTE');
+  assert.equal(res.data.property_id, '2');
+  assertResponseMatchesDraft(res);
+
+  // 6. LIVE_QUOTE -> GUEST_DETAILS
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'LIVE_QUOTE',
+    data: { property_id: '2', check_in: '2026-12-01', check_out: '2026-12-03', adults: 2, children: 0, infants: 0, pets: 0 }
+  });
+  assert.equal(res.screen, 'GUEST_DETAILS');
+  assertResponseMatchesDraft(res);
+
+  // 7. GUEST_DETAILS -> BOOKING_REVIEW
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'GUEST_DETAILS',
+    data: {
+      property_id: '2',
+      check_in: '2026-12-01',
+      check_out: '2026-12-03',
+      adults: 2,
+      children: 0,
+      infants: 0,
+      pets: 0,
+      guest_name: 'Journey One Guest',
+      guest_email: 'j1@example.com',
+      whatsapp_number: '+919876543210'
+    }
+  });
+  assert.equal(res.screen, 'BOOKING_REVIEW');
+  assert.equal(res.data.property_id, '2');
+  assertResponseMatchesDraft(res);
+
+  // 8. BOOKING_REVIEW -> ENQUIRY_CREATED
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'BOOKING_REVIEW',
+    flow_token: 'journey-token-1',
+    data: {
+      property_id: '2',
+      check_in: '2026-12-01',
+      check_out: '2026-12-03',
+      adults: 2,
+      children: 0,
+      infants: 0,
+      pets: 0,
+      guest_name: 'Journey One Guest',
+      guest_email: 'j1@example.com',
+      whatsapp_number: '+919876543210',
+      flow_token: 'journey-token-1'
+    }
+  });
+  assert.equal(res.screen, 'ENQUIRY_CREATED');
+  assert.equal(res.data.enquiry_status, 'NEW');
+  assert.equal(capturedEnquiry.property_id, 2);
+
+  delete process.env.JWT_SECRET;
+  delete process.env.WEBSITE_APPLICATION_URL;
+});
+
+test('COMPLETE JOURNEY 2: RESERVE_ENTRY -> Booking Details -> Catalogue -> Details -> Calendar -> Guests -> Quote -> Review -> Enquiry', async () => {
+  process.env.JWT_SECRET = 'journey-secret-signing-2';
+  process.env.WEBSITE_APPLICATION_URL = 'https://guest.kezoistays.test/upload';
+
+  let capturedEnquiry;
+  const journeyDb = {
+    query: async (sql, params = []) => {
+      if (/FROM properties p/.test(sql)) return { rows: [{ ...property, id: 1 }] };
+      if (/FROM properties WHERE id=/.test(sql)) return { rows: [{ ...property, id: 1 }] };
+      if (/FROM property_marketing_photos WHERE/.test(sql)) return { rows: [{ id: 10, meta_image_base64: 'b64_villa', alt_text: 'Villa' }] };
+      if (/SELECT start_date, end_date FROM/.test(sql)) return { rows: [] };
+      if (/integration_idempotency_key=/.test(sql)) return { rows: [] };
+      if (/SELECT \* FROM guests/.test(sql)) return { rows: [{ id: 25 }] };
+      if (/INSERT INTO enquiries/.test(sql)) {
+        capturedEnquiry = { id: 102, guest_id: 25, property_id: params[1], status: 'NEW' };
+        return { rows: [capturedEnquiry] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  // 1. RESERVE_ENTRY -> BOOKING_DETAILS
+  let res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'RESERVE_ENTRY',
+    data: { entry_intent: 'reserve' }
+  });
+  assert.equal(res.screen, 'BOOKING_DETAILS');
+  assertResponseMatchesDraft(res);
+
+  // 2. BOOKING_DETAILS -> PROPERTY_SELECTION (select dates & guests)
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'BOOKING_DETAILS',
+    data: { check_in: '2026-11-15', check_out: '2026-11-18', adults: 4, children: 0, infants: 0, pets: 0 }
+  });
+  assert.equal(res.screen, 'PROPERTY_SELECTION');
+  assert.equal(res.data.has_available_properties, true);
+  assertResponseMatchesDraft(res);
+
+  // 3. PROPERTY_SELECTION -> PROPERTY_DETAILS (choose property 1)
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_SELECTION',
+    data: { property_id: '1', check_in: '2026-11-15', check_out: '2026-11-18', adults: 4, children: 0, infants: 0, pets: 0 }
+  });
+  assert.equal(res.screen, 'PROPERTY_DETAILS');
+  assert.equal(res.data.property_id, '1');
+  assertResponseMatchesDraft(res);
+
+  // 4. PROPERTY_DETAILS -> CALENDAR
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'PROPERTY_DETAILS',
+    data: { property_id: '1', check_in: '2026-11-15', check_out: '2026-11-18', adults: 4, children: 0, infants: 0, pets: 0 }
+  });
+  assert.equal(res.screen, 'CALENDAR');
+  assertResponseMatchesDraft(res);
+
+  // 5. CALENDAR -> GUEST_SELECTION
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'CALENDAR',
+    data: { property_id: '1', check_in: '2026-11-15', check_out: '2026-11-18', adults: 4, children: 0, infants: 0, pets: 0 }
+  });
+  assert.equal(res.screen, 'GUEST_SELECTION');
+  assertResponseMatchesDraft(res);
+
+  // 6. GUEST_SELECTION -> LIVE_QUOTE
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'GUEST_SELECTION',
+    data: { property_id: '1', check_in: '2026-11-15', check_out: '2026-11-18', adults: 4, children: 0, infants: 0, pets: 0 }
+  });
+  assert.equal(res.screen, 'LIVE_QUOTE');
+  assertResponseMatchesDraft(res);
+
+  // 7. LIVE_QUOTE -> GUEST_DETAILS
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'LIVE_QUOTE',
+    data: { property_id: '1', check_in: '2026-11-15', check_out: '2026-11-18', adults: 4, children: 0, infants: 0, pets: 0 }
+  });
+  assert.equal(res.screen, 'GUEST_DETAILS');
+  assertResponseMatchesDraft(res);
+
+  // 8. GUEST_DETAILS -> BOOKING_REVIEW
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'GUEST_DETAILS',
+    data: {
+      property_id: '1',
+      check_in: '2026-11-15',
+      check_out: '2026-11-18',
+      adults: 4,
+      children: 0,
+      infants: 0,
+      pets: 0,
+      guest_name: 'Journey Two Guest',
+      guest_email: 'j2@example.com',
+      whatsapp_number: '+919876543210'
+    }
+  });
+  assert.equal(res.screen, 'BOOKING_REVIEW');
+  assertResponseMatchesDraft(res);
+
+  // 9. BOOKING_REVIEW -> ENQUIRY_CREATED
+  res = await handleFlowAction(journeyDb, {
+    action: 'data_exchange',
+    screen: 'BOOKING_REVIEW',
+    flow_token: 'journey-token-2',
+    data: {
+      property_id: '1',
+      check_in: '2026-11-15',
+      check_out: '2026-11-18',
+      adults: 4,
+      children: 0,
+      infants: 0,
+      pets: 0,
+      guest_name: 'Journey Two Guest',
+      guest_email: 'j2@example.com',
+      whatsapp_number: '+919876543210',
+      flow_token: 'journey-token-2'
+    }
+  });
+  assert.equal(res.screen, 'ENQUIRY_CREATED');
+  assert.equal(capturedEnquiry.property_id, 1);
+
+  delete process.env.JWT_SECRET;
+  delete process.env.WEBSITE_APPLICATION_URL;
+});
+
 
 

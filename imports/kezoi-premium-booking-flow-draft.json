@@ -2,8 +2,8 @@
   "version": "7.3",
   "data_api_version": "3.0",
   "routing_model": {
-    "VIEW_STAY_ENTRY": ["PROPERTY_DETAILS"],
-    "RESERVE_ENTRY": ["CALENDAR"],
+    "VIEW_STAY_ENTRY": ["PROPERTY_SELECTION", "PROPERTY_DETAILS"],
+    "RESERVE_ENTRY": ["BOOKING_DETAILS", "CALENDAR"],
     "BOOKING_DETAILS": ["PROPERTY_SELECTION"],
     "PROPERTY_SELECTION": ["PROPERTY_DETAILS"],
     "PROPERTY_DETAILS": ["CALENDAR"],
@@ -33,12 +33,10 @@
           { "type": "TextBody", "text": "${data.error_message}", "visible": "${data.has_error}" },
           {
             "type": "Footer",
-            "label": "Explore property details",
+            "label": "Explore properties",
             "on-click-action": {
               "name": "data_exchange",
               "payload": {
-                "property_id": "${data.property_id}",
-                "property_code": "${data.property_code}",
                 "entry_intent": "view_stay"
               }
             }
@@ -68,8 +66,6 @@
             "on-click-action": {
               "name": "data_exchange",
               "payload": {
-                "property_id": "${data.property_id}",
-                "property_code": "${data.property_code}",
                 "entry_intent": "reserve"
               }
             }
@@ -162,7 +158,8 @@
             }
           },
           "__example__": [
-            { "id": "1", "title": "Kezoi Stays Manikonda", "description": "3 bedrooms | 3 bathrooms | INR 23598" }
+            { "id": "1", "title": "Kezoi Stays Manikonda", "description": "Manikonda | 3 bedrooms • 3 bathrooms • Up to 8 guests | From INR 10000/night" },
+            { "id": "2", "title": "Kezoi Penthouse Gachibowli", "description": "Gachibowli | 4 bedrooms • 4 bathrooms • Up to 12 guests | From INR 16000/night" }
           ]
         },
         "no_properties_available": { "type": "boolean", "__example__": false },
@@ -212,11 +209,11 @@
         "property_id": { "type": "string", "__example__": "1" },
         "property_name": { "type": "string", "__example__": "Kezoi Stays Manikonda" },
         "property_specs_text": { "type": "string", "__example__": "3 Bedrooms • 3 Bathrooms • Villa" },
-        "property_description": { "type": "string", "__example__": "A premium Kezoi stay." },
+        "property_description": { "type": "string", "__example__": "Experience unparalleled luxury in the heart of Hyderabad. Our residence offers a seamless blend of elegant design, modern amenities, and personalized service." },
         "property_location": { "type": "string", "__example__": "Manikonda, Hyderabad" },
-        "amenities": { "type": "array", "items": { "type": "string" }, "__example__": ["Wi-Fi", "Kitchen"] },
-        "amenities_text": { "type": "string", "__example__": "Wi-Fi • Kitchen" },
-        "max_guests": { "type": "number", "__example__": 10 },
+        "amenities": { "type": "array", "items": { "type": "string" }, "__example__": ["Wi-Fi", "Kitchen", "Air conditioning", "Washer", "Free parking on premises", "Elevator"] },
+        "amenities_text": { "type": "string", "__example__": "Wi-Fi • Kitchen • Air conditioning • Washer • Free parking on premises • Elevator" },
+        "max_guests": { "type": "number", "__example__": 8 },
         "max_guests_text": { "type": "string", "__example__": "Accommodates up to 8 guests" },
         "gallery": {
           "type": "array",

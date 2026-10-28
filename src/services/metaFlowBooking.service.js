@@ -85,14 +85,39 @@ const formatPropertySpecs = property => {
   return parts.length ? parts.join(' • ') : 'Verified residence';
 };
 
+const formatPropertyCatalogueItem = (p) => {
+  const location = p.area || p.city || 'Hyderabad';
+  const beds = `${p.bedrooms || 0} bedrooms`;
+  const baths = `${p.bathrooms || 0} bathrooms`;
+  const maxGuests = Number(p.max_guests || 0);
+  const capacity = maxGuests > 0 ? `Up to ${maxGuests} guests` : '';
+  const specs = [beds, baths, capacity].filter(Boolean).join(' • ');
+
+  let priceText = '';
+  if (p.quote && p.quote.total_amount) {
+    priceText = `${p.quote.currency || 'INR'} ${money(p.quote.total_amount)}`;
+  } else if (p.base_price != null) {
+    priceText = `From ${p.currency || 'INR'} ${money(p.base_price)}/night`;
+  }
+
+  const parts = [location, specs, priceText].filter(Boolean);
+  return {
+    id: String(p.id),
+    title: p.property_name,
+    description: parts.join(' | ')
+  };
+};
+
 const formatPropertyDetailsData = (property, data = {}) => {
   const amenities = Array.isArray(property.public_amenities) ? property.public_amenities : [];
   const amenitiesText = amenities.length ? amenities.join(' • ') : 'Verified amenities available upon request';
   const photos = property.photos || [];
-  const gallery = photos.map(photo => ({
-    src: photo.meta_image_base64,
-    'alt-text': photo.alt_text || photo.caption || property.property_name
-  }));
+  const gallery = photos
+    .filter(photo => photo && photo.meta_image_base64 && typeof photo.meta_image_base64 === 'string' && photo.meta_image_base64.trim().length > 0)
+    .map(photo => ({
+      src: photo.meta_image_base64,
+      'alt-text': photo.alt_text || photo.caption || property.property_name
+    }));
   const maxGuests = Number(property.max_guests || 0);
   const maxGuestsText = maxGuests > 0 ? `Accommodates up to ${maxGuests} guests` : 'Capacity confirmed upon booking';
   const desc = String(property.public_description || '').trim() ||
@@ -114,6 +139,19 @@ const formatPropertyDetailsData = (property, data = {}) => {
     gallery,
     has_gallery: gallery.length > 0
   };
+};
+
+const listActiveProperties = async (db) => {
+  const result = await db.query(
+    `SELECT p.id, p.property_code, p.property_name, p.property_type, p.area, p.city,
+            p.bedrooms, p.bathrooms, p.max_guests, p.base_price, p.included_guests,
+            p.extra_guest_price, p.currency, p.gst_enabled, p.gst_rate, p.price_includes_gst,
+            p.public_description, p.public_location, p.public_amenities
+       FROM properties p
+      WHERE p.status = 'ACTIVE'
+      ORDER BY p.property_name`
+  );
+  return result.rows;
 };
 
 const propertyDetails = async (db, propertyId, propertyCode) => {
@@ -255,14 +293,29 @@ const handleFlowAction = async (db, payload) => {
     else if (payload.action === 'INIT') return errorResponse(SCREENS.START, 'A supported entry intent is required', data);
   }
   if (payload.screen === SCREENS.VIEW_ENTRY) {
-    const property = await propertyDetails(db, data.property_id, data.property_code);
-    if (!property) return errorResponse(SCREENS.VIEW_ENTRY, 'Property not found or inactive', data);
-    return screenResponse(SCREENS.DETAILS, formatPropertyDetailsData(property, data));
+    if (data.property_id || data.property_code) {
+      const property = await propertyDetails(db, data.property_id, data.property_code);
+      if (!property) return errorResponse(SCREENS.VIEW_ENTRY, 'Property not found or inactive', data);
+      return screenResponse(SCREENS.DETAILS, formatPropertyDetailsData(property, data));
+    }
+    const activeProperties = await listActiveProperties(db);
+    const hasAvailable = activeProperties.length > 0;
+    return screenResponse(SCREENS.PROPERTIES, {
+      ...data,
+      search_summary_text: 'Explore our handpicked luxury villas and apartments in Hyderabad.',
+      properties: activeProperties.map(p => formatPropertyCatalogueItem(p)),
+      no_properties_available: !hasAvailable,
+      has_available_properties: hasAvailable,
+      quote_generated_at: new Date().toISOString()
+    });
   }
   if (payload.screen === SCREENS.RESERVE_ENTRY) {
-    const property = await propertyDetails(db, data.property_id, data.property_code);
-    if (!property) return errorResponse(SCREENS.RESERVE_ENTRY, 'Property not found or inactive', data);
-    return screenResponse(SCREENS.CALENDAR, { ...data, property_id: String(property.id), unavailable_dates: await unavailableDates(db, property.id), calendar_refreshed_at: new Date().toISOString() });
+    if (data.property_id || data.property_code) {
+      const property = await propertyDetails(db, data.property_id, data.property_code);
+      if (!property) return errorResponse(SCREENS.RESERVE_ENTRY, 'Property not found or inactive', data);
+      return screenResponse(SCREENS.CALENDAR, { ...data, property_id: String(property.id), unavailable_dates: await unavailableDates(db, property.id), calendar_refreshed_at: new Date().toISOString() });
+    }
+    return screenResponse(SCREENS.START, { ...data });
   }
   if (payload.screen === SCREENS.START) {
     const guests = data.adults;
@@ -289,11 +342,7 @@ const handleFlowAction = async (db, payload) => {
       infants: data.infants,
       pets: data.pets,
       search_summary_text: `Live results for ${result.stay.check_in} to ${result.stay.check_out} (${result.stay.nights} night${result.stay.nights === 1 ? '' : 's'}).`,
-      properties: result.properties.map(p => ({
-        id: String(p.id),
-        title: p.property_name,
-        description: `${p.bedrooms || 0} bedrooms | ${p.bathrooms || 0} bathrooms | ${p.quote.currency} ${money(p.quote.total_amount)}`
-      })),
+      properties: result.properties.map(p => formatPropertyCatalogueItem(p)),
       no_properties_available: !hasAvailable,
       has_available_properties: hasAvailable,
       quote_generated_at: new Date().toISOString()
@@ -417,4 +466,4 @@ const handleFlowAction = async (db, payload) => {
   return errorResponse(payload.screen || SCREENS.START, 'Unsupported Flow screen', data);
 };
 
-module.exports = { SCREENS, handleFlowAction, propertyDetails, unavailableDates, selectedQuote, createPendingEnquiry, enquiryKey };
+module.exports = { SCREENS, handleFlowAction, propertyDetails, listActiveProperties, formatPropertyCatalogueItem, unavailableDates, selectedQuote, createPendingEnquiry, enquiryKey };
