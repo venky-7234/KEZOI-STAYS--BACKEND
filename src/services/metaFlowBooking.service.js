@@ -288,13 +288,18 @@ const handleFlowAction = async (db, payload) => {
   if (payload.action !== 'INIT' && payload.action !== 'data_exchange') {
     return errorResponse(payload.screen || SCREENS.START, 'Unsupported Flow action', data);
   }
-  if (payload.action === 'INIT' || !payload.screen) {
+  if (payload.action === 'INIT') {
+    const initialScreen = data.entry_intent === 'reserve'
+      ? SCREENS.RESERVE_ENTRY
+      : SCREENS.VIEW_ENTRY;
+    return screenResponse(initialScreen, data);
+  }
+
+  if (!payload.screen) {
     if (data.entry_intent === 'view_stay') {
       payload.screen = SCREENS.VIEW_ENTRY;
     } else if (data.entry_intent === 'reserve') {
       payload.screen = SCREENS.RESERVE_ENTRY;
-    } else if (payload.action === 'INIT') {
-      payload.screen = SCREENS.VIEW_ENTRY;
     }
   }
   if (payload.screen === SCREENS.VIEW_ENTRY) {

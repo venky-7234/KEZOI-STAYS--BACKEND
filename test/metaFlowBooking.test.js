@@ -121,10 +121,38 @@ test('rejects a property code that does not match the selected active property I
   assert.match(response.data.error_message, /not found or inactive/);
 });
 
-test('supports Meta INIT when selected-property entry data is supplied', async () => {
-  const response = await handleFlowAction(fakeDb(), { action: 'INIT', flow_token: 'entry-token', data: { property_id: '1', entry_intent: 'view_stay' } });
-  assert.equal(response.screen, 'PROPERTY_DETAILS');
+test('Meta INIT returns the View Stay entry screen even when a property is preselected', async () => {
+  const response = await handleFlowAction(fakeDb(), {
+    action: 'INIT',
+    flow_token: 'entry-token',
+    data: { property_id: '1', entry_intent: 'view_stay' }
+  });
+  assert.equal(response.screen, 'VIEW_STAY_ENTRY');
+  assert.equal(response.data.property_id, '1');
+  assert.equal(response.data.entry_intent, 'view_stay');
   assert.equal(Object.hasOwn(response.data, 'flow_token'), false);
+  assertResponseMatchesDraft(response);
+});
+
+test('Meta INIT returns the Reserve entry screen for reserve intent', async () => {
+  const response = await handleFlowAction(fakeDb(), {
+    action: 'INIT',
+    flow_token: 'reserve-entry-token',
+    data: { property_id: '1', entry_intent: 'reserve' }
+  });
+  assert.equal(response.screen, 'RESERVE_ENTRY');
+  assert.equal(response.data.property_id, '1');
+  assert.equal(response.data.entry_intent, 'reserve');
+  assert.equal(Object.hasOwn(response.data, 'flow_token'), false);
+  assertResponseMatchesDraft(response);
+});
+
+test('Meta INIT defaults to the View Stay entry screen', async () => {
+  const response = await handleFlowAction(fakeDb(), {
+    action: 'INIT',
+    data: {}
+  });
+  assert.equal(response.screen, 'VIEW_STAY_ENTRY');
   assertResponseMatchesDraft(response);
 });
 
