@@ -111,6 +111,7 @@ const formatPropertyCatalogueItem = (p) => {
 const formatPropertyDetailsData = (property, data = {}) => {
   const amenities = Array.isArray(property.public_amenities) ? property.public_amenities : [];
   const amenitiesText = amenities.length ? amenities.join(' • ') : 'Verified amenities available upon request';
+
   const photos = property.photos || [];
   const gallery = photos
     .filter(photo => photo && photo.meta_image_base64 && typeof photo.meta_image_base64 === 'string' && photo.meta_image_base64.trim().length > 0)
@@ -288,9 +289,13 @@ const handleFlowAction = async (db, payload) => {
     return errorResponse(payload.screen || SCREENS.START, 'Unsupported Flow action', data);
   }
   if (payload.action === 'INIT' || !payload.screen) {
-    if (data.entry_intent === 'view_stay') payload.screen = SCREENS.VIEW_ENTRY;
-    else if (data.entry_intent === 'reserve') payload.screen = SCREENS.RESERVE_ENTRY;
-    else if (payload.action === 'INIT') return errorResponse(SCREENS.START, 'A supported entry intent is required', data);
+    if (data.entry_intent === 'view_stay') {
+      payload.screen = SCREENS.VIEW_ENTRY;
+    } else if (data.entry_intent === 'reserve') {
+      payload.screen = SCREENS.RESERVE_ENTRY;
+    } else if (payload.action === 'INIT') {
+      payload.screen = SCREENS.VIEW_ENTRY;
+    }
   }
   if (payload.screen === SCREENS.VIEW_ENTRY) {
     if (data.property_id || data.property_code) {
